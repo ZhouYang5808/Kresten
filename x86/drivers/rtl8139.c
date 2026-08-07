@@ -141,8 +141,10 @@ int rtl8139_rx(uint8_t *buf, uint16_t maxlen) {
         return 0;
 
     int off = rx_off;
-    uint16_t status = (uint16_t)(rx_ring[off] | (rx_ring[off + 1] << 8));
-    uint16_t len = (uint16_t)(rx_ring[off + 2] | (rx_ring[off + 3] << 8));
+    uint16_t status = (uint16_t)(rx_ring[off] |
+                                 (rx_ring[(off + 1) & (RX_BUF_SIZE - 1)] << 8));
+    uint16_t len = (uint16_t)(rx_ring[(off + 2) & (RX_BUF_SIZE - 1)] |
+                              (rx_ring[(off + 3) & (RX_BUF_SIZE - 1)] << 8));
 
     if ((status & 0x0001) && len > 4 && len - 4 <= maxlen) {
         for (int i = 0; i < len - 4; i++)

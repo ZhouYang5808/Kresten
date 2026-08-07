@@ -55,7 +55,6 @@ static struct {
     uint32_t lease;      /* seconds */
     uint32_t renew_at;   /* ticks */
     uint32_t deadline;   /* ticks */
-    uint32_t last_tick;
     int tries;
     uint32_t result_ip;
     uint32_t result_mask;
@@ -260,12 +259,14 @@ void dhcp_rx(const uint8_t *p, uint16_t len, uint32_t src) {
     }
 }
 
-static int dhcp_wait(int *ok) {
+static int dhcp_wait(int *ok, int advance_state) {
     dhc.tries++;
     while ((int32_t)(sched_get_ticks() - dhc.deadline) < 0) {
         net_poll();
         if (*ok)
             return 0;
+        if (advance_state && dhc.state != advance_state)
+            return 0; /* OFFER moved us to REQUEST (or NAK restarted) */
     }
     return -1;
 }
@@ -282,32 +283,38 @@ int dhcp_run(DhcpLease *out) {
                          ((uint32_t)net_get_config()->mac[4] << 24) |
                          ((uint32_t)net_get_config()->mac[5] << 16));
 
-    /* DISCOVER phase */
+    /* DISCOVER phase: wait until an OFFER moves us forward */
     for (int attempt = 0; attempt < TRIES_MAX; attempt++) {
         dhc.state = DHCP_DISCOVER;
         dhc.tries = 0;
+        dhc.result_ok = 0;
         dhc.deadline = sched_get_ticks() + WAIT_TICKS;
         dhcp_send_msg(DHCP_MSG_DISCOVER, 0, 0, 0, 0, BC_ADDR);
-        if (dhcp_wait(&dhc.result_ok) == 0)
+        if (dhcp_wait(&dhc.result_ok, DHCP_DISCOVER) == 0 &&
+            dhc.state != DHCP_DISCOVER)
             break;
     }
-    /* REQUEST phase (state may have advanced to DHCP_REQUEST on OFFER) */
-    if (dhc.state == DHCP_DISCOVER) {
+    /* REQUEST phase: skip it if OFFER+ACK already landed in one poll */
+    if (dhc.state != DHCP_REQUEST && dhc.state != DHCP_BOUND) {
         puts("[DHCP] no OFFER, giving up\n");
         return -1;
     }
     for (int attempt = 0; attempt < TRIES_MAX; attempt++) {
+        if (dhc.state == DHCP_BOUND)
+            break;
         dhc.tries = 0;
+        dhc.result_ok = 0;
         dhc.deadline = sched_get_ticks() + WAIT_TICKS;
         dhcp_send_msg(DHCP_MSG_REQUEST, 0, dhc.offered_ip,
                       dhc.server_id, 1, BC_ADDR);
-        if (dhcp_wait(&dhc.result_ok) == 0)
+        if (dhcp_wait(&dhc.result_ok, DHCP_REQUEST) == 0)
             break;
-        if (dhc.state == DHCP_DISCOVER) {
-            /* NAK restarted us; retry discovery then request again */
-            dhc.state = DHCP_REQUEST;
-            dhcp_send_msg(DHCP_MSG_REQUEST, 0, dhc.offered_ip,
-                          dhc.server_id, 1, BC_ADDR);
+        if (dhc.state != DHCP_REQUEST) {
+            /* NAK restarted us: wait for the new OFFER, then REQUEST */
+            dhc.deadline = sched_get_ticks() + WAIT_TICKS;
+            if (dhcp_wait(&dhc.result_ok, DHCP_DISCOVER) == 0 &&
+                dhc.state != DHCP_DISCOVER)
+                break;
         }
     }
     if (!dhc.result_ok) {
@@ -360,21 +367,34 @@ void dhcp_tick(void) {
                          dhc.result_dns, dhc.lease);
         return;
     }
-    /* Renewal failed: fall back to a fresh DISCOVER cycle */
+    /* Renewal failed: fresh DISCOVER -> REQUEST -> ACK cycle */
     dhc.state = DHCP_DISCOVER;
-    dhc.tries = 0;
-    dhc.deadline = sched_get_ticks() + WAIT_TICKS;
-    dhcp_send_msg(DHCP_MSG_DISCOVER, 0, 0, 0, 0, BC_ADDR);
     for (int attempt = 0; attempt < TRIES_MAX; attempt++) {
+        dhc.tries = 0;
         dhc.result_ok = 0;
-        dhcp_wait(&dhc.result_ok);
+        dhc.deadline = sched_get_ticks() + WAIT_TICKS;
+        dhcp_send_msg(DHCP_MSG_DISCOVER, 0, 0, 0, 0, BC_ADDR);
+        if (dhcp_wait(&dhc.result_ok, DHCP_DISCOVER) == 0 &&
+            dhc.state != DHCP_DISCOVER)
+            break;
+    }
+    if (dhc.state == DHCP_REQUEST || dhc.state == DHCP_BOUND) {
+        for (int attempt = 0; attempt < TRIES_MAX; attempt++) {
+            if (dhc.state == DHCP_BOUND)
+                break;
+            dhc.tries = 0;
+            dhc.result_ok = 0;
+            dhc.deadline = sched_get_ticks() + WAIT_TICKS;
+            dhcp_send_msg(DHCP_MSG_REQUEST, 0, dhc.offered_ip,
+                          dhc.server_id, 1, BC_ADDR);
+            if (dhcp_wait(&dhc.result_ok, DHCP_REQUEST) == 0)
+                break;
+        }
         if (dhc.result_ok) {
             dhcp_apply_lease(dhc.result_ip, dhc.result_mask, dhc.result_gw,
                              dhc.result_dns, dhc.lease);
             return;
         }
-        dhc.deadline = sched_get_ticks() + WAIT_TICKS;
-        dhcp_send_msg(DHCP_MSG_DISCOVER, 0, 0, 0, 0, BC_ADDR);
     }
     /* Give up on re-DISCOVER: keep old lease, retry later */
     dhc.state = DHCP_BOUND;

@@ -56,12 +56,16 @@ void net_poll(void) {
     static uint8_t buf[1600];
     if (!net_ready)
         return;
+    /* The net thread and the boot/main thread can both reach here
+     * (DHCP/ping poll loops): keep RX-ring advancement atomic. */
+    __asm__ volatile ("cli");
     dhcp_tick();
     int len;
     while ((len = rtl8139_rx(buf, (uint16_t)sizeof(buf))) > 0)
         eth_rx(buf, (uint16_t)len);
     nc.rx_packets = rtl8139_rx_count();
     nc.tx_packets = rtl8139_tx_count();
+    __asm__ volatile ("sti");
 }
 
 void net_ifconfig(void) {

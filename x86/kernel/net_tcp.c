@@ -212,5 +212,5 @@ void tcp_reset_rx(void) {
 }
 
 int tcp_connected(void) {
-    return tcp.state == TCP_ESTAB || tcp.state == TCP_CLOSE_WAIT;
+    return tcp.state == TCP_ESTAB;
 }
