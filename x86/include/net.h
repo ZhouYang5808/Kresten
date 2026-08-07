@@ -25,6 +25,20 @@ int net_dhcp(void);
 NetConfig *net_get_config(void);
 void net_thread_start(void);
 
+typedef struct {
+    uint32_t ip;
+    uint32_t mask;
+    uint32_t gw;
+    uint32_t dns;
+    uint32_t lease;
+} DhcpLease;
+
+int udp_bind(uint16_t port, void (*cb)(const uint8_t *, uint16_t, uint32_t));
+int udp_send(uint32_t dst, uint16_t sport, uint16_t dport,
+             const void *data, uint16_t len);
+int dhcp_run(DhcpLease *out);
+void dhcp_tick(void);
+
 static inline uint16_t htons(uint16_t v) {
     return (uint16_t)((v << 8) | (v >> 8));
 }

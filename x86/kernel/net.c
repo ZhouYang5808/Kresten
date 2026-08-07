@@ -45,20 +45,10 @@ int net_init(void) {
         return -1;
     }
     memcpy(nc.mac, rtl8139_get_mac(), 6);
-    nc.ip = str_to_ip("10.0.2.15");
-    nc.netmask = str_to_ip("255.255.255.0");
-    nc.gateway = str_to_ip("10.0.2.2");
-    nc.dns = str_to_ip("10.0.2.3");
-    nc.dhcp_ok = 0;
-    nc.rx_packets = 0;
-    nc.tx_packets = 0;
     net_ready = 1;
-    printf("[NET] up: %u.%u.%u.%u/24 gw %u.%u.%u.%u dns %u.%u.%u.%u\n",           (nc.ip >> 24) & 0xFF, (nc.ip >> 16) & 0xFF,
-           (nc.ip >> 8) & 0xFF, nc.ip & 0xFF,
-           (nc.gateway >> 24) & 0xFF, (nc.gateway >> 16) & 0xFF,
-           (nc.gateway >> 8) & 0xFF, nc.gateway & 0xFF,
-           (nc.dns >> 24) & 0xFF, (nc.dns >> 16) & 0xFF,
-           (nc.dns >> 8) & 0xFF, nc.dns & 0xFF);
+    printf("[NET] NIC ready (RTL8139 %02x:%02x:%02x:%02x:%02x:%02x)\n",
+           nc.mac[0], nc.mac[1], nc.mac[2],
+           nc.mac[3], nc.mac[4], nc.mac[5]);
     return 0;
 }
 
@@ -66,6 +56,7 @@ void net_poll(void) {
     static uint8_t buf[1600];
     if (!net_ready)
         return;
+    dhcp_tick();
     int len;
     while ((len = rtl8139_rx(buf, (uint16_t)sizeof(buf))) > 0)
         eth_rx(buf, (uint16_t)len);
@@ -93,15 +84,51 @@ void net_ifconfig(void) {
     printf("  DNS      %u.%u.%u.%u\n",
            (nc.dns >> 24) & 0xFF, (nc.dns >> 16) & 0xFF,
            (nc.dns >> 8) & 0xFF, nc.dns & 0xFF);
+    printf("  DHCP     %s\n", nc.dhcp_ok ? "bound" : "static");
     printf("  Packets  rx=%u tx=%u\n", (unsigned)nc.rx_packets,
            (unsigned)nc.tx_packets);
 }
 
-/* DHCP: SLIRP serves a fixed subnet; static config above is equivalent. */
+/* Apply a DHCP lease to the live configuration. */
+void dhcp_apply_lease(uint32_t ip, uint32_t mask, uint32_t gw,
+                      uint32_t dns, uint32_t lease) {
+    nc.ip = ip;
+    if (mask)
+        nc.netmask = mask;
+    if (gw)
+        nc.gateway = gw;
+    if (dns)
+        nc.dns = dns;
+    nc.dhcp_ok = 1;
+    printf("[DHCP] lease ip %u.%u.%u.%u mask %u.%u.%u.%u gw %u.%u.%u.%u "
+           "dns %u.%u.%u.%u lease %u s\n",
+           (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF,
+           (nc.netmask >> 24) & 0xFF, (nc.netmask >> 16) & 0xFF,
+           (nc.netmask >> 8) & 0xFF, nc.netmask & 0xFF,
+           (nc.gateway >> 24) & 0xFF, (nc.gateway >> 16) & 0xFF,
+           (nc.gateway >> 8) & 0xFF, nc.gateway & 0xFF,
+           (nc.dns >> 24) & 0xFF, (nc.dns >> 16) & 0xFF,
+           (nc.dns >> 8) & 0xFF, nc.dns & 0xFF,
+           (unsigned)lease);
+}
+
+/* DHCP client: DORA acquisition, static SLIRP fallback on failure. */
 int net_dhcp(void) {
-    if (net_ready)
-        printf("Static SLIRP config in use (10.0.2.15); DHCP skipped\n");
-    return net_ready ? 0 : -1;
+    if (!net_ready)
+        return -1;
+    DhcpLease l;
+    puts("[NET] DHCP: discovering ...\n");
+    if (dhcp_run(&l) == 0) {
+        dhcp_apply_lease(l.ip, l.mask, l.gw, l.dns, l.lease);
+        return 0;
+    }
+    nc.ip = str_to_ip("10.0.2.15");
+    nc.netmask = str_to_ip("255.255.255.0");
+    nc.gateway = str_to_ip("10.0.2.2");
+    nc.dns = str_to_ip("10.0.2.3");
+    nc.dhcp_ok = 0;
+    puts("[NET] DHCP failed, using static fallback 10.0.2.15/24\n");
+    return -1;
 }
 
 int net_ping(const char *target, int count) {

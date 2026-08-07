@@ -45,10 +45,14 @@ void ip_rx(const uint8_t *frame, uint16_t len) {
         return;
     if (total > len - 14 || total < ihl)
         return;
-    if (dst != net_get_local_ip() && dst != 0xFFFFFFFF)
-        return;
     const uint8_t *payload = ip + ihl;
     uint16_t plen = (uint16_t)(total - ihl);
+    if (dst != net_get_local_ip() && dst != 0xFFFFFFFF) {
+        /* Allow DHCP (UDP 68) even before the IP is configured */
+        if (!(ip[9] == 17 && plen >= 8 &&
+              (uint16_t)((payload[2] << 8) | payload[3]) == 68))
+            return;
+    }
     switch (ip[9]) {
     case 1:
         icmp_rx(payload, plen, src);
@@ -95,7 +99,11 @@ int ip_send(uint32_t dst, uint8_t proto, const void *payload, uint16_t len) {
         memcpy(ip + 20, payload, len);
 
     uint8_t mac[6];
-    if (arp_resolve(dst, mac) != 0)
+    if (dst == 0xFFFFFFFF) {
+        static const uint8_t bcast[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+        memcpy(mac, bcast, 6);
+    } else if (arp_resolve(dst, mac) != 0) {
         return -1;
+    }
     return eth_send(mac, 0x0800, pkt, total);
 }
