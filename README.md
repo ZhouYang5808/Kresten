@@ -30,16 +30,21 @@ raw ATA PIO — no BIOS disk services, no second-stage bootloader.
 
 ## Requirements (build)
 
-A Linux environment with the 32-bit GCC multilib toolchain (x86) and/or the
-ARM cross toolchain (ARM):
+A Linux (WSL) environment with the 32-bit GCC multilib toolchain (x86)
+and/or the ARM cross toolchain (ARM):
 
 ```sh
-sudo apt install gcc-multilib binutils python3 grub-pc-bin xorriso mtools
-sudo apt install gcc-arm-none-eabi   # ARM build only
+# x86 build (kernel + ISO)
+sudo apt install build-essential gcc-multilib binutils python3 \
+                 grub-pc-bin xorriso mtools
+# ARM build (kernel + ISO)
+sudo apt install gcc-arm-none-eabi genisoimage
+# Testing in QEMU (optional but recommended)
+sudo apt install qemu-system-x86 qemu-system-arm seabios
 ```
 
-(QEMU is optional but recommended for testing: `qemu-system-x86`,
-`qemu-system-arm`)
+Tested with: GCC 15.2 (x86), GCC 14.2 arm-none-eabi, GRUB 2.14,
+QEMU 10.2, genisoimage, Python 3.
 
 ## Build
 
