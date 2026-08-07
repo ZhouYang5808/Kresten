@@ -12,6 +12,7 @@
 #include <io.h>
 #include <driver.h>
 #include <registry.h>
+#include <net.h>
 
 void gdt_init(void);
 int drivers_register_all(void);
@@ -53,6 +54,8 @@ void kernel_main(uint32_t mb_info) {
     drivers_register_all();
     driver_init_all();
 
+    net_init();
+
     heap_init(0, 0);
     rtc_init();
     env_init();
@@ -66,6 +69,11 @@ void kernel_main(uint32_t mb_info) {
     }
     proc_init();
     proc_create("test", (uint32_t)test_process);
+    net_thread_start();
+    {
+        int rc = net_ping("10.0.2.2", 3);
+        printf("[NET] gateway ping: %s\n", rc > 0 ? "OK" : "FAIL");
+    }
     plugin_init_all();
     while (1)
         plugin_dispatch("desktop", NULL);

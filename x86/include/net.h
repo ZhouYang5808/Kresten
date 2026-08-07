@@ -23,6 +23,7 @@ uint32_t net_nslookup(const char *domain);
 int net_fetch(const char *host, int port, const char *path);
 int net_dhcp(void);
 NetConfig *net_get_config(void);
+void net_thread_start(void);
 
 static inline uint16_t htons(uint16_t v) {
     return (uint16_t)((v << 8) | (v >> 8));

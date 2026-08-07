@@ -12,6 +12,7 @@
 #include <process.h>
 #include <driver.h>
 #include <registry.h>
+#include <net.h>
 #include <gfx.h>
 
 #define MAX_CMD_LEN 256
@@ -50,6 +51,8 @@ void cmd_vgatest(char *args);
 void cmd_kbdtest(char *args);
 void cmd_reg(char *args);
 void cmd_gfx(char *args);
+void cmd_ifconfig(char *args);
+void cmd_ping(char *args);
 void execute_command(char *cmdline);
 
 static int sudo_mode = 0;
@@ -101,9 +104,46 @@ static Command commands[] = {
     {"kbdtest", cmd_kbdtest, "Test the keyboard driver"},
     {"reg",     cmd_reg,     "Registry: reg get|set|del <key>"},
     {"gfx",     cmd_gfx,     "Graphics: gfx on|off|fill x y w h c|pixel x y c"},
+    {"ifconfig", cmd_ifconfig, "Show network configuration"},
+    {"ping",    cmd_ping,    "Ping a host: ping <ip> [count]"},
     {"exit",    cmd_exit,    "Exit to desktop"},
     {NULL, NULL, NULL}
 };
+
+void cmd_ifconfig(char *args) {
+    (void)args;
+    net_ifconfig();
+}
+
+void cmd_ping(char *args) {
+    char target[64];
+    int count = 4;
+    if (args) {
+        const char *p = args;
+        while (*p == ' ')
+            p++;
+        int n = 0;
+        while (*p && *p != ' ' && n < 63)
+            target[n++] = *p++;
+        target[n] = '\0';
+        while (*p == ' ')
+            p++;
+        if (*p) {
+            int c = 0;
+            while (*p >= '0' && *p <= '9')
+                c = c * 10 + (*p++ - '0');
+            if (c > 0 && c < 100)
+                count = c;
+        }
+        if (!n) {
+            puts("usage: ping <ip> [count]\n");
+            return;
+        }
+        net_ping(target, count);
+    } else {
+        puts("usage: ping <ip> [count]\n");
+    }
+}
 
 void cmd_exit(char *args) {
     (void)args;
