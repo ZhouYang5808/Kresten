@@ -78,7 +78,7 @@ const char *_log_level_str(int level) {
 }
 
 void kernel_main(void) {
-    LOG_INFO("KERNEL", "MyOS Kernel v0.3 starting...");
+    LOG_INFO("KERNEL", "MyOS Kernel v1.0 starting...");
     LOG_INFO("KERNEL", "Assertion system ready");
 
     int x = 42;

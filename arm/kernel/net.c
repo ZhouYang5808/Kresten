@@ -867,7 +867,7 @@ int net_fetch(const char *host, int port, const char *path) {
     snprintf(req, sizeof(req),
              "GET %s HTTP/1.1\r\n"
              "Host: %s\r\n"
-             "User-Agent: MyOS/0.3\r\n"
+             "User-Agent: MyOS/1.0\r\n"
              "Accept: */*\r\n"
              "Connection: close\r\n"
              "\r\n",

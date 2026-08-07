@@ -4,7 +4,7 @@
  * text file on the filesystem. Format (one entry per line):
  *
  *   # MyOS Registry
- *   System.Version=0.3
+ *   System.Version=1.0
  *   Shell.Prompt=C:\> 
  *
  * Lines starting with '#' are comments. Every reg_set()/reg_del() rewrites
@@ -150,7 +150,7 @@ void reg_init(void) {
         printf("[REGISTRY] loaded %d entries from %s%s\n", reg_count, REG_FILE,
                persist_valid() ? " (persisted)" : "");
     } else {
-        reg_set_impl("System.Version", "0.3");
+        reg_set_impl("System.Version", "1.0");
         reg_set_impl("System.Build", "20260803");
         reg_set_impl("System.Author", "MyOS");
         reg_set_impl("System.TickMs", "10");
