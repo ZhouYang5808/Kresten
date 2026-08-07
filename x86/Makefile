@@ -1,4 +1,4 @@
-﻿TOP_DIR = $(shell pwd)
+TOP_DIR = $(shell pwd)
 BUILD_DIR = $(TOP_DIR)/build
 DIST_DIR = $(TOP_DIR)/dist
 

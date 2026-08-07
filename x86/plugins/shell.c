@@ -112,7 +112,7 @@ void cmd_exit(char *args) {
 
 void cmd_help(char *args) {
     (void)args;
-    puts("\n=== MyOS Shell ===\n");
+    puts("\n=== Kresten Shell ===\n");
     puts("Available commands:\n");
     for (int i = 0; commands[i].name; i++)
         printf("  %-8s %s\n", commands[i].name, commands[i].desc);
@@ -662,7 +662,7 @@ int shell_run(void) {
     shell_exit = 0;
     puts("\n");
     puts("=============================================\n");
-    puts("  MyOS Command Shell v1.1\n");
+    puts("  Kresten Command Shell v1.0\n");
     puts("  Type 'help' for available commands\n");
     puts("  Type 'exit' to return to the desktop\n");
     puts("=============================================\n\n");

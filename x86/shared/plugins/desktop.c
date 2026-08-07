@@ -434,7 +434,7 @@ static void shell_draw(void) {
     fb_circle(fx + 28, fy + 10, 4, C_RED);
     fb_circle(fx + 46, fy + 10, 4, C_ORANGE);
     fb_circle(fx + 64, fy + 10, 4, C_GREEN);
-    fb_text(fx + 24, fy + 34, "> myos shell", C_TEAL);
+    fb_text(fx + 24, fy + 34, "> kresten shell", C_TEAL);
     fb_text(fx + 24, fy + 56, "click to launch the", C_GRAY_MID);
     fb_text(fx + 24, fy + 76, "fullscreen console", C_GRAY_MID);
     fb_hline(fx + 24, fy + 100, 60, C_TEAL);

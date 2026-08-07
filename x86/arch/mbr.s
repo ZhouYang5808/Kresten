@@ -1,7 +1,7 @@
-/* myos MBR boot sector: switches to protected mode and loads the install
+/* kresten MBR boot sector: switches to protected mode and loads the install
  * image from LBA 1 via ATA PIO into 1MB, then jumps to its entry point.
  * Image layout (written by the installer):
- *   0: 8-byte magic "MYOSBOOT"
+ *   0: 8-byte magic "KRSTENBR"
  *   8: u32 total image size (header + payload)
  *   12: u32 entry point
  *   16: raw kernel (objcopy -O binary of kernel.elf, starts at 1MB) */
@@ -45,7 +45,7 @@ pmode:
     movl $1, %esi
     movl $8, %ecx
     call ata_read
-    cmpl $0x534F594D, 0x8000
+    cmpl $0x5453524B, 0x8000
     jne err32
     movb $0x48, 0xB8002
     movb $0x07, 0xB8003

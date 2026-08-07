@@ -47,15 +47,15 @@ The repository is split into two independent builds, one per architecture:
 
 ```sh
 cd x86 && make          # x86/dist/kernel.elf
-cd x86 && make iso      # x86/dist/myos-x86.iso + myos-x86-install.iso
+cd x86 && make iso      # x86/dist/kresten-x86.iso + kresten-x86-install.iso
 
 cd arm && make          # arm/dist/kernel.elf (Versatile PB)
 ```
 
 ### x86
 
-- `dist/myos-x86.iso` — regular bootable ISO (GRUB)
-- `dist/myos-x86-install.iso` — installer ISO: boots, installs to the
+- `dist/kresten-x86.iso` — regular bootable ISO (GRUB)
+- `dist/kresten-x86-install.iso` — installer ISO: boots, installs to the
   first hard disk (MBR + image), reboots into the installed system
 
 ## Run
@@ -69,13 +69,13 @@ cd x86 && make run
 Or boot the ISO:
 
 ```sh
-qemu-system-i386 -m 128M -cdrom dist/myos-x86.iso -boot d -vga vmware
+qemu-system-i386 -m 128M -cdrom dist/kresten-x86.iso -boot d -vga vmware
 ```
 
 Install to a virtual hard disk and boot from it (two phases, one command):
 
 ```sh
-qemu-system-i386 -m 128M -hda install.img -cdrom dist/myos-x86-install.iso \
+qemu-system-i386 -m 128M -hda install.img -cdrom dist/kresten-x86-install.iso \
   -boot once=d,order=c -vga vmware
 ```
 

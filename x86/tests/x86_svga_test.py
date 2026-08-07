@@ -13,7 +13,7 @@ os.mkfifo("/tmp/svga_ser.in")
 qemu = [
     "qemu-system-x86_64", "-machine", "pc",
     "-bios", "/usr/share/seabios/bios.bin",
-    "-cdrom", "/root/os/dist/myos-x86.iso",
+    "-cdrom", "/root/os/dist/kresten-x86.iso",
     "-boot", "d",
     "-vga", "vmware",
     "-display", "none",

@@ -655,7 +655,7 @@ int shell_run(void) {
     char cmdline[MAX_CMD_LEN];
     puts("\n");
     puts("=============================================\n");
-    puts("  MyOS Command Shell v1.1\n");
+    puts("  Kresten Command Shell v1.0\n");
     puts("  Type 'help' for available commands\n");
     puts("  Type 'exit' to return to the desktop\n");
     puts("=============================================\n\n");

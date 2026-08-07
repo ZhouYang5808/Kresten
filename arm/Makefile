@@ -25,7 +25,7 @@ SHARED_OBJS = $(patsubst $(TOP_DIR)/shared/%.c,$(BUILD_DIR)/shared/%.o,$(SHARED_
 OBJS = $(BOOT_OBJ) $(KERNEL_OBJS) $(DRIVER_OBJS) $(LIBC_OBJS) $(PLUGIN_OBJS) $(SHARED_OBJS)
 TARGET = $(DIST_DIR)/kernel.elf
 
-ISO_TARGET = $(DIST_DIR)/myos.iso
+ISO_TARGET = $(DIST_DIR)/kresten-arm.iso
 
 all: $(TARGET)
 

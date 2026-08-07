@@ -17,7 +17,7 @@ int install_to_hdd(void) {
     }
     uint32_t size = __install_img_size;
     printf("[INSTALL] embedded image %u bytes\n", size);
-    if (size < 16 || strncmp((const char *)__install_img, "MYOSBOOT", 8) != 0) {
+    if (size < 16 || strncmp((const char *)__install_img, "KRSTENBR", 8) != 0) {
         puts("[INSTALL] bad image magic\n");
         return -1;
     }

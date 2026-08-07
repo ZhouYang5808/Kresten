@@ -47,7 +47,7 @@ void kernel_main(uint32_t mb_info) {
     serial_init();
     gdt_init();
 
-    puts("[INFO] KERNEL: MyOS Kernel v1.0 x86 starting...\n");
+    puts("[INFO] KERNEL: Kresten Kernel v1.0 x86 starting...\n");
 
     idt_init();
     drivers_register_all();

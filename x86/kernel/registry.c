@@ -3,7 +3,7 @@
  * The registry keeps key=value pairs in memory and persists them to a plain
  * text file on the filesystem. Format (one entry per line):
  *
- *   # MyOS Registry
+ *   # Kresten Registry
  *   System.Version=1.0
  *   Shell.Prompt=C:\> 
  *
@@ -152,7 +152,7 @@ void reg_init(void) {
     } else {
         reg_set_impl("System.Version", "1.0");
         reg_set_impl("System.Build", "20260803");
-        reg_set_impl("System.Author", "MyOS");
+        reg_set_impl("System.Author", "Kresten");
         reg_set_impl("System.TickMs", "10");
         reg_set_impl("Shell.Prompt", "C:\\> ");
         reg_set_impl("Shell.History", "8");
@@ -213,7 +213,7 @@ int reg_save(void) {
     static char buf[8192];
     int pos = 0;
     buf[0] = '\0';
-    reg_append(buf, &pos, sizeof(buf), "# MyOS Registry\n");
+    reg_append(buf, &pos, sizeof(buf), "# Kresten Registry\n");
     reg_append(buf, &pos, sizeof(buf), "# key=value, one per line\n");
     for (int i = 0; i < reg_count; i++) {
         reg_append(buf, &pos, sizeof(buf), reg_keys[i]);

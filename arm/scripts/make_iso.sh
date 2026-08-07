@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build dist/myos.iso — MyOS release ISO (kernel + docs + run scripts).
+# Build dist/kresten-arm.iso — Kresten release ISO (kernel + docs + run scripts).
 # Note: versatilepb boots via -kernel; the ISO is the distribution medium.
 set -e
 cd "$(dirname "$0")/.."
@@ -12,7 +12,7 @@ mkdir -p "$STAGE/boot"
 cp dist/kernel.elf "$STAGE/boot/kernel.elf"
 
 cat > "$STAGE/README.TXT" <<EOF
-MyOS v$VERSION - ARM Versatile/PB (QEMU)
+Kresten v$VERSION - ARM Versatile/PB (QEMU)
 
 A small ARM operating system with:
   - DOS-like shell (help for commands)
@@ -43,8 +43,8 @@ exec qemu-system-arm -machine versatilepb -kernel "$DIR/boot/kernel.elf" -nograp
 EOF
 chmod +x "$STAGE/RUN.SH"
 
-genisoimage -quiet -o dist/myos.iso \
-    -V "MYOS_$VERSION" -A "MyOS v$VERSION" -J -R "$STAGE"
+genisoimage -quiet -o dist/kresten-arm.iso \
+    -V "KRESTEN_$VERSION" -A "Kresten v$VERSION" -J -R "$STAGE"
 
-echo "=== ISO built: dist/myos.iso ==="
-ls -l dist/myos.iso
+echo "=== ISO built: dist/kresten-arm.iso ==="
+ls -l dist/kresten-arm.iso

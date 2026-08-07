@@ -69,10 +69,10 @@ int fs_init(void) {
     /* Create root directory as a directory entry */
     add_entry("C:\\", FS_TYPE_DIR, 0, 0);
     add_entry("C:\\README.txt", FS_TYPE_FILE, 85,
-              "MyOS v1.0 - Drive-letter based OS\n"
+              "Kresten v1.0 - Drive-letter based OS\n"
               "Type help for commands\n");
     add_entry("C:\\version.txt", FS_TYPE_FILE, 32,
-              "MyOS Kernel v0.5\nBuild: 2025-07-27\n");
+              "Kresten Kernel v1.0\nBuild: 2026-08-07\n");
     add_entry("C:\\kernel.elf", FS_TYPE_FILE, 80532, 0);
     add_entry("C:\\shell.elf", FS_TYPE_FILE, 20480, 0);
     add_entry("C:\\config.sys", FS_TYPE_FILE, 128,

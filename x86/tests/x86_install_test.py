@@ -62,7 +62,7 @@ def read_for(ser_out, seconds):
     return buf.decode(errors="replace")
 
 print("=== PHASE 1: INSTALL + AUTO-REBOOT ===")
-proc, mon, ser_in, ser_out = run_qemu("inst", ["-cdrom", "/root/os/dist/myos-x86-install.iso"], "once=d,order=c", no_reboot=False)
+proc, mon, ser_in, ser_out = run_qemu("inst", ["-cdrom", "/root/os/dist/kresten-x86-install.iso"], "once=d,order=c", no_reboot=False)
 log = read_for(ser_out, 45)
 print(log)
 print("=== PHASE 1 END ===")

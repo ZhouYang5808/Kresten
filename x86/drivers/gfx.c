@@ -1,4 +1,4 @@
-﻿/* ===== x86/drivers/gfx.c: VGA graphics driver =====
+/* ===== x86/drivers/gfx.c: VGA graphics driver =====
  * Preferred mode: Bochs VBE linear framebuffer 640x480x8 @ 0xE0000000
  * (supported by QEMU std VGA and VMware).  Fallback: VGA mode 13h
  * 320x200x256 @ 0xA0000.
