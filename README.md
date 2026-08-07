@@ -1,10 +1,11 @@
 # Kresten
 
-A small hobby operating system for x86, written from scratch: a multiboot
-kernel with preemptive multitasking, a tabbed browser-style GUI desktop, and
-a real installer that writes itself to a hard disk and boots from it.
+A small hobby operating system, written from scratch, for two architectures:
+**x86** (multiboot kernel with a tabbed browser-style GUI desktop and a real
+installer that writes itself to a hard disk) and **ARM** (Versatile PB,
+semihosted console build).
 
-Kresten boots via GRUB (multiboot v1) and includes its own 512-byte MBR
+The x86 build boots via GRUB (multiboot v1) and includes its own 512-byte MBR
 boot sector that loads the kernel from the hard disk in protected mode via
 raw ATA PIO — no BIOS disk services, no second-stage bootloader.
 
@@ -29,20 +30,29 @@ raw ATA PIO — no BIOS disk services, no second-stage bootloader.
 
 ## Requirements (build)
 
-A Linux environment with 32-bit GCC multilib toolchain:
+A Linux environment with the 32-bit GCC multilib toolchain (x86) and/or the
+ARM cross toolchain (ARM):
 
 ```sh
 sudo apt install gcc-multilib binutils python3 grub-pc-bin xorriso mtools
+sudo apt install gcc-arm-none-eabi   # ARM build only
 ```
 
-(QEMU is optional but recommended for testing: `qemu-system-x86`)
+(QEMU is optional but recommended for testing: `qemu-system-x86`,
+`qemu-system-arm`)
 
 ## Build
 
+The repository is split into two independent builds, one per architecture:
+
 ```sh
-make          # dist/kernel.elf
-make iso      # dist/myos-x86.iso + dist/myos-x86-install.iso
+cd x86 && make          # x86/dist/kernel.elf
+cd x86 && make iso      # x86/dist/myos-x86.iso + myos-x86-install.iso
+
+cd arm && make          # arm/dist/kernel.elf (Versatile PB)
 ```
+
+### x86
 
 - `dist/myos-x86.iso` — regular bootable ISO (GRUB)
 - `dist/myos-x86-install.iso` — installer ISO: boots, installs to the
@@ -53,7 +63,7 @@ make iso      # dist/myos-x86.iso + dist/myos-x86-install.iso
 Quick test in QEMU:
 
 ```sh
-make run
+cd x86 && make run
 ```
 
 Or boot the ISO:
@@ -72,27 +82,26 @@ qemu-system-i386 -m 128M -hda install.img -cdrom dist/myos-x86-install.iso \
 After the kernel prints `[INFO] INSTALL DONE` it reboots; the VM then
 boots from the hard disk into the desktop. Tested on QEMU and VMware.
 
+ARM (Versatile PB, semihosted console):
+
+```sh
+cd arm && make run
+```
+
 ## Repository layout
 
 ```
-arch/      boot (multiboot header), GDT/IDT, interrupts, switch,
-           MBR boot sector (arch/mbr.s)
-kernel/    kernel_main, installer, scheduler support, registry, malloc,
-           process, ELF, plugins, editor, fs, env
-drivers/   ata, gfx (SVGA/VBE/mode13h), keyboard, mouse, rtc, vga
-libc/      stdio, stdlib, string, ctype
-include/   kernel headers
-plugins/   hello, runtime, shell (linked-in plugins)
-shared/    desktop GUI plugin, PS/2 packet decoder
-scripts/   ISO build scripts, install image packer
-tests/     QEMU regression scripts (install flow, SVGA, VBE)
-Makefile   build (kernel / installer / iso targets)
-link.ld    linker script (kernel at 1 MB, .plugins section)
+x86/       x86 build: Makefile, arch/ (multiboot boot.s, GDT/IDT,
+           interrupts, MBR boot sector), kernel/, drivers/ (SVGA/VBE),
+           libc/, include/, plugins/, shared/ (desktop GUI), scripts/
+           (ISO build + install packer), tests/ (QEMU regression scripts)
+arm/       ARM build: Makefile (arm-none-eabi), boot/start.s, kernel/
+           (Versatile PB: lcd/timer/net + installer), include/, shared/
+           (desktop GUI), scripts/ (gen_crt_table.py, make_iso.sh)
 ```
 
-## Screenshots
-
-Boot the ISO in QEMU or VMware; the desktop opens to the App Manager.
+The desktop GUI (`shared/plugins/desktop.c`), the PS/2 packet decoder and
+the minimal libc are shared between both architectures.
 
 ## License
 
