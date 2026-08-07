@@ -12,12 +12,6 @@ int arp_resolve(uint32_t ip, uint8_t *mac);
 void icmp_rx(const uint8_t *pkt, uint16_t len, uint32_t src);
 void udp_rx(const uint8_t *pkt, uint16_t len, uint32_t src);
 void tcp_rx(const uint8_t *pkt, uint16_t len, uint32_t src);
-void udp_rx_stub(const uint8_t *pkt, uint16_t len, uint32_t src) {
-    (void)pkt; (void)len; (void)src;
-}
-void tcp_rx_stub(const uint8_t *pkt, uint16_t len, uint32_t src) {
-    (void)pkt; (void)len; (void)src;
-}
 
 static uint16_t ip_id = 0x4000;
 
@@ -60,10 +54,10 @@ void ip_rx(const uint8_t *frame, uint16_t len) {
         icmp_rx(payload, plen, src);
         break;
     case 17:
-        udp_rx_stub(payload, plen, src);
+        udp_rx(payload, plen, src);
         break;
     case 6:
-        tcp_rx_stub(payload, plen, src);
+        tcp_rx(payload, plen, src);
         break;
     default:
         break;

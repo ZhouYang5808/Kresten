@@ -53,6 +53,7 @@ void cmd_reg(char *args);
 void cmd_gfx(char *args);
 void cmd_ifconfig(char *args);
 void cmd_ping(char *args);
+void cmd_fetch(char *args);
 void execute_command(char *cmdline);
 
 static int sudo_mode = 0;
@@ -106,6 +107,7 @@ static Command commands[] = {
     {"gfx",     cmd_gfx,     "Graphics: gfx on|off|fill x y w h c|pixel x y c"},
     {"ifconfig", cmd_ifconfig, "Show network configuration"},
     {"ping",    cmd_ping,    "Ping a host: ping <ip> [count]"},
+    {"fetch",   cmd_fetch,   "HTTP GET: fetch <host> [port] <path>"},
     {"exit",    cmd_exit,    "Exit to desktop"},
     {NULL, NULL, NULL}
 };
@@ -143,6 +145,44 @@ void cmd_ping(char *args) {
     } else {
         puts("usage: ping <ip> [count]\n");
     }
+}
+
+void cmd_fetch(char *args) {
+    if (!args || !*args) {
+        puts("usage: fetch <host> [port] <path>\n");
+        return;
+    }
+    char host[64];
+    char path[128];
+    int port = 80;
+    const char *p = args;
+    while (*p == ' ')
+        p++;
+    int n = 0;
+    while (*p && *p != ' ' && n < 63)
+        host[n++] = *p++;
+    host[n] = '\0';
+    while (*p == ' ')
+        p++;
+    if (*p >= '0' && *p <= '9') {
+        int c = 0;
+        while (*p >= '0' && *p <= '9')
+            c = c * 10 + (*p++ - '0');
+        if (c > 0 && c < 65536)
+            port = c;
+        while (*p == ' ')
+            p++;
+    }
+    if (!n || !*p) {
+        puts("usage: fetch <host> [port] <path>\n");
+        return;
+    }
+    n = 0;
+    while (*p && n < 127)
+        path[n++] = *p++;
+    path[n] = '\0';
+    printf("fetching http://%s:%d%s\n", host, port, path);
+    net_fetch(host, port, path);
 }
 
 void cmd_exit(char *args) {

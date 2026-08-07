@@ -5,6 +5,7 @@
  */
 #include <net.h>
 #include <process.h>
+#include <fs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,14 @@ uint32_t rtl8139_tx_count(void);
 
 void eth_rx(const uint8_t *frame, uint16_t len);
 int icmp_ping(uint32_t ip, int count);
+extern uint32_t sched_get_ticks(void);
+int tcp_connect(uint32_t ip, uint16_t port);
+int tcp_send(const void *data, uint16_t len);
+void tcp_close(void);
+int tcp_rxlen(void);
+const uint8_t *tcp_rxdata(void);
+void tcp_reset_rx(void);
+int tcp_connected(void);
 
 static NetConfig nc;
 static int net_ready = 0;
@@ -109,6 +118,98 @@ int net_ping(const char *target, int count) {
            (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
            (ip >> 8) & 0xFF, ip & 0xFF);
     return icmp_ping(ip, count);
+}
+
+/* HTTP GET over TCP: prints response, saves body to fetch.txt */
+int net_fetch(const char *host, int port, const char *path) {
+    if (!net_ready) {
+        puts("Network down\n");
+        return -1;
+    }
+    uint32_t ip = str_to_ip(host);
+    if (ip == 0) {
+        ip = net_nslookup(host);
+        if (ip == 0) {
+            printf("fetch: cannot resolve '%s'\n", host);
+            return -1;
+        }
+        printf("  resolved %s -> %u.%u.%u.%u\n", host,
+               (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
+               (ip >> 8) & 0xFF, ip & 0xFF);
+    }
+    printf("  connecting to %u.%u.%u.%u:%d ...\n",
+           (ip >> 24) & 0xFF, (ip >> 16) & 0xFF,
+           (ip >> 8) & 0xFF, ip & 0xFF, port);
+    if (tcp_connect(ip, (uint16_t)port) != 0) {
+        puts("  connect: failed\n");
+        return -1;
+    }
+    tcp_reset_rx();
+    char req[512];
+    int n = 0;
+    const char *parts[6];
+    int plen[6];
+    parts[0] = "GET ";
+    plen[0] = 4;
+    parts[1] = path;
+    plen[1] = (int)strlen(path);
+    parts[2] = " HTTP/1.0\r\nHost: ";
+    plen[2] = 15;
+    parts[3] = host;
+    plen[3] = (int)strlen(host);
+    parts[4] = ":\0:";
+    plen[4] = 1;
+    {
+        char portbuf[8];
+        int pn = 0;
+        int v = port;
+        char tmp[8];
+        if (v == 0)
+            tmp[pn++] = '0';
+        while (v > 0) {
+            tmp[pn++] = (char)('0' + v % 10);
+            v /= 10;
+        }
+        while (pn > 0)
+            portbuf[plen[4]++] = tmp[--pn];
+        portbuf[plen[4]] = '\0';
+        parts[4] = portbuf;
+    }
+    parts[5] = "\r\nConnection: close\r\n\r\n";
+    plen[5] = 24;
+    for (int i = 0; i < 6 && n < 500; i++) {
+        for (int j = 0; j < plen[i] && n < 500; j++)
+            req[n++] = parts[i][j];
+    }
+    req[n] = '\0';
+    if (tcp_send(req, (uint16_t)n) != 0) {
+        tcp_close();
+        puts("  send: failed\n");
+        return -1;
+    }
+    puts("  waiting for response ...\n");
+    uint32_t deadline = sched_get_ticks() + 200;
+    while ((int32_t)(sched_get_ticks() - deadline) < 0 &&
+           !(tcp_rxlen() > 0 && !tcp_connected()))
+        net_poll();
+    int rxlen = tcp_rxlen();
+    const uint8_t *rxdata = tcp_rxdata();
+    if (rxlen <= 0) {
+        tcp_close();
+        puts("  no response\n");
+        return -1;
+    }
+    printf("  got %d bytes\n\n", rxlen);
+    for (int i = 0; i < rxlen && i < 1024; i++)
+        putchar(rxdata[i]);
+    if (rxlen > 1024)
+        printf("\n  ... (%d more bytes)\n", rxlen - 1024);
+    putchar('\n');
+    if (fs_update_file("\\fetch.txt", (const char *)rxdata) != 0 &&
+        fs_create_file("\\fetch.txt", (const char *)rxdata) != 0)
+        puts("  fetch: could not save \\fetch.txt\n");
+    tcp_close();
+    return 0;
 }
 
 static void net_thread(void) {
