@@ -402,23 +402,23 @@ static void gfx_set_palette(void) {
         rgb[i][1] = p16[i * 3 + 1];
         rgb[i][2] = p16[i * 3 + 2];
     }
-    /* 16-31: desktop gradient (deep blue-black -> blue-violet) */
+    /* 16-31: desktop gradient (white -> light blue) */
     for (int i = 0; i < 16; i++) {
-        rgb[16 + i][0] = (uint8_t)(i * 9 / 15);
-        rgb[16 + i][1] = (uint8_t)(4 + i * 6 / 15);
-        rgb[16 + i][2] = (uint8_t)(15 + i * 17 / 15);
+        rgb[16 + i][0] = (uint8_t)(63 - i * 22 / 15);
+        rgb[16 + i][1] = (uint8_t)(63 - i * 11 / 15);
+        rgb[16 + i][2] = 63;
     }
-    /* 32-47: dark surface gradient (panel/card base) */
+    /* 32-47: white surface gradient (panel/card base) */
     for (int i = 0; i < 16; i++) {
-        rgb[32 + i][0] = (uint8_t)(21 + i * 13 / 15);
-        rgb[32 + i][1] = (uint8_t)(23 + i * 14 / 15);
-        rgb[32 + i][2] = (uint8_t)(29 + i * 19 / 15);
+        rgb[32 + i][0] = (uint8_t)(63 - i * 9 / 15);
+        rgb[32 + i][1] = (uint8_t)(63 - i * 10 / 15);
+        rgb[32 + i][2] = 63;
     }
-    /* 48-63: bright surface gradient (hover/active) */
+    /* 48-63: light blue surface gradient (hover/active) */
     for (int i = 0; i < 16; i++) {
-        rgb[48 + i][0] = (uint8_t)(34 + i * 17 / 15);
-        rgb[48 + i][1] = (uint8_t)(37 + i * 18 / 15);
-        rgb[48 + i][2] = (uint8_t)(48 + i * 15 / 15);
+        rgb[48 + i][0] = (uint8_t)(46 - i * 14 / 15);
+        rgb[48 + i][1] = (uint8_t)(57 - i * 8 / 15);
+        rgb[48 + i][2] = 63;
     }
     /* 64-79: accent blue -> cyan */
     for (int i = 0; i < 16; i++) {

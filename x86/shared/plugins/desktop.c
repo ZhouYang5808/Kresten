@@ -17,26 +17,26 @@
 extern uint32_t sched_get_ticks(void);
 void sys_poweroff(void);
 
-/* ---- modern dark theme palette (indexes into gfx.c custom palette) ---- */
-#define C_DESK_TOP   16   /* desktop gradient: deep blue-black */
+/* ---- blue-white theme palette (indexes into gfx.c custom palette) ---- */
+#define C_DESK_TOP   16   /* desktop gradient: white -> light blue */
 #define C_DESK_BOT   31
-#define C_SURFACE    34   /* panels, app content */
-#define C_SURFACE_HI 47
-#define C_BRIGHT     52   /* hover / active surfaces */
-#define C_TAB_BG     32   /* tab bar base */
-#define C_TAB_HOVER  38
-#define C_TAB_ACTIVE 47
+#define C_SURFACE    32   /* white panels, app content */
+#define C_SURFACE_HI 40
+#define C_BRIGHT     52   /* light blue hover / active surfaces */
+#define C_TAB_BG     32   /* white tab bar */
+#define C_TAB_HOVER  52
+#define C_TAB_ACTIVE 40
 #define C_ACCENT     70   /* accent blue */
-#define C_ACCENT_DIM 64
+#define C_ACCENT_DIM 66
 #define C_PURPLE     84
 #define C_TEAL       104
 #define C_ORANGE     118
 #define C_GREEN      134
 #define C_RED        148
-#define C_GRAY_HI    250  /* near-white text */
-#define C_GRAY_MID   220
-#define C_GRAY_LOW   190
-#define C_GRAY_DARK  168
+#define C_GRAY_HI    190  /* ink text: dark blue-gray */
+#define C_GRAY_MID   210
+#define C_GRAY_LOW   225
+#define C_GRAY_DARK  205  /* borders / separators */
 #define C_BLACK      0
 #define C_WHITE      15
 
@@ -229,6 +229,13 @@ static const char *app_titles[] = {
 static const int app_kinds[] = { APP_SHELL, APP_FMGR, APP_MYCOMP, APP_RECYCLE };
 #define APP_COUNT ((int)(sizeof(app_kinds) / sizeof(app_kinds[0])))
 
+static const char *app_desc[] = {
+    "Fullscreen console with the Kresten command line",
+    "Browse files and directories on the C: drive",
+    "Drive information and disk usage",
+    "Deleted files live here",
+};
+
 /* ---- tabs ---- */
 #define MAX_TABS 8
 #define TAB_BAR_H 30
@@ -328,17 +335,43 @@ static void run_shell(void) {
     dirty = 1;
 }
 
-/* ---- App Manager (launcher / new-tab page) ---- */
+/* ---- App Manager (launcher / new-tab page, list style) ---- */
 static int mng_sel = 0;
 
-#define MNG_CARD_W 140
-#define MNG_CARD_H 160
-#define MNG_CARD_GAP 20
+/* compact mode on small (ARM 320x200) screens: shorter rows, no description */
+#define MNG_ROW_W   ((GFX_W) < 500 ? (GFX_W) - 40 : 460)
+#define MNG_ROW_H   ((GFX_H) < 300 ? 30 : 56)
+#define MNG_ROW_GAP ((GFX_H) < 300 ? 6 : 10)
 
 static void mng_geom(int *x0, int *y0) {
-    int total = APP_COUNT * MNG_CARD_W + (APP_COUNT - 1) * MNG_CARD_GAP;
-    *x0 = (GFX_W - total) / 2;
+    *x0 = (GFX_W - MNG_ROW_W) / 2;
     *y0 = TAB_BAR_H + 96;
+}
+
+static int mng_row_y(int i) {
+    int x0, y0;
+    mng_geom(&x0, &y0);
+    return y0 + i * (MNG_ROW_H + MNG_ROW_GAP);
+}
+
+/* visible row count (small screens scroll the list) */
+static int mng_vis_rows(void) {
+    int x0, y0;
+    mng_geom(&x0, &y0);
+    int n = (GFX_H - y0 - 6) / (MNG_ROW_H + MNG_ROW_GAP);
+    if (n < 1) n = 1;
+    if (n > APP_COUNT) n = APP_COUNT;
+    return n;
+}
+
+static int mng_scroll(void) {
+    int n = mng_vis_rows();
+    if (APP_COUNT <= n)
+        return 0;
+    int s = mng_sel - (n - 1) / 2;
+    if (s < 0) s = 0;
+    if (s > APP_COUNT - n) s = APP_COUNT - n;
+    return s;
 }
 
 static void draw_bg_gradient(void) {
@@ -355,11 +388,12 @@ static int mng_hover(void) {
         return -1;
     int x0, y0;
     mng_geom(&x0, &y0);
-    for (int i = 0; i < APP_COUNT; i++) {
-        int x = x0 + i * (MNG_CARD_W + MNG_CARD_GAP);
-        if (cur_x >= x && cur_x < x + MNG_CARD_W &&
-            cur_y >= y0 && cur_y < y0 + MNG_CARD_H)
-            return i;
+    int s = mng_scroll(), n = mng_vis_rows();
+    for (int k = 0; k < n; k++) {
+        int y = mng_row_y(k);
+        if (cur_x >= x0 && cur_x < x0 + MNG_ROW_W &&
+            cur_y >= y && cur_y < y + MNG_ROW_H)
+            return s + k;
     }
     return -1;
 }
@@ -371,44 +405,50 @@ static void draw_app_manager(void) {
     /* heading */
     fb_text2x_center(GFX_W / 2, TAB_BAR_H + 34, "App Manager", C_GRAY_HI);
     fb_rect(GFX_W / 2 - 90, TAB_BAR_H + 70, 180, 3, C_ACCENT);
-    /* app cards */
+    /* app list rows (scrollable on small screens) */
     int hov = mng_hover();
-    for (int i = 0; i < APP_COUNT; i++) {
-        int x = x0 + i * (MNG_CARD_W + MNG_CARD_GAP);
+    int compact = MNG_ROW_H == 30;
+    int s = mng_scroll(), n = mng_vis_rows();
+    for (int k = 0; k < n; k++) {
+        int i = s + k;
+        int y = mng_row_y(k);
         int lit = (i == mng_sel) || (i == hov);
-        uint8_t fill = lit ? C_SURFACE_HI : C_SURFACE;
-        uint8_t border = lit ? C_ACCENT : C_GRAY_DARK;
-        fb_rrect_outline(x, y0, MNG_CARD_W, MNG_CARD_H, 10, border, fill);
-        if (i == mng_sel) /* keyboard selection ring */
-            fb_rrect_outline(x - 2, y0 - 2, MNG_CARD_W + 4, MNG_CARD_H + 4,
-                             12, C_ACCENT, fill);
-        draw_icon_art(x + MNG_CARD_W / 2 - 12, y0 + 26, i);
-        const char *l = app_titles[app_kinds[i]];
-        fb_text_center(x + MNG_CARD_W / 2, y0 + 62, l, C_GRAY_HI);
+        uint8_t fill = lit ? C_BRIGHT : C_SURFACE_HI;
+        fb_rrect_outline(x0, y, MNG_ROW_W, MNG_ROW_H, 8, C_GRAY_DARK, fill);
+        if (lit)
+            fb_rect(x0, y, 6, MNG_ROW_H, C_ACCENT);
+        draw_icon_art(x0 + 12, compact ? y + 3 : y + 16, i);
+        fb_text(x0 + 46, compact ? y + 7 : y + 10, app_titles[app_kinds[i]], C_GRAY_HI);
+        if (!compact) {
+            fb_text(x0 + 56, y + 32, app_desc[i], C_GRAY_LOW);
+            fb_text(x0 + MNG_ROW_W - 24, y + 20, ">", lit ? C_ACCENT : C_GRAY_MID);
+        }
     }
-    /* footer hint */
-    fb_text_center(GFX_W / 2, GFX_H - 34,
-                   "Click to open  |  Alt+F4 closes tab  |  + opens App Manager",
-                   C_GRAY_LOW);
+    /* footer hint (skip on compact screens) */
+    if (!compact)
+        fb_text_center(GFX_W / 2, GFX_H - 34,
+                       "Up/Down to select, Enter to open  |  Alt+F4 closes tab  |  + opens App Manager",
+                       C_GRAY_LOW);
 }
 
 static void manager_click(int mx, int my) {
     int x0, y0;
     mng_geom(&x0, &y0);
-    for (int i = 0; i < APP_COUNT; i++) {
-        int x = x0 + i * (MNG_CARD_W + MNG_CARD_GAP);
-        if (mx >= x && mx < x + MNG_CARD_W &&
-            my >= y0 && my < y0 + MNG_CARD_H) {
-            mng_sel = i;
-            tab_open(app_kinds[i]);
+    int s = mng_scroll(), n = mng_vis_rows();
+    for (int k = 0; k < n; k++) {
+        int y = mng_row_y(k);
+        if (mx >= x0 && mx < x0 + MNG_ROW_W &&
+            my >= y && my < y + MNG_ROW_H) {
+            mng_sel = s + k;
+            tab_open(app_kinds[s + k]);
             return;
         }
     }
 }
 
 static void manager_key(int sc) {
-    if (sc == 0x4B || sc == 0x4D) { /* left / right */
-        mng_sel = (mng_sel + (sc == 0x4D ? 1 : APP_COUNT - 1)) % APP_COUNT;
+    if (sc == 0x48 || sc == 0x50) { /* up / down */
+        mng_sel = (mng_sel + (sc == 0x50 ? 1 : APP_COUNT - 1)) % APP_COUNT;
         dirty = 1;
     } else if (sc == 0x1C) { /* enter */
         tab_open(app_kinds[mng_sel]);
