@@ -12,7 +12,7 @@ static int env_count = 0;
 
 void env_init(void) {
     env_count = 0;
-    env_set("SHELL", "mysh");
+    env_set("SHELL", "kresten");
     env_set("PATH", "/");
     env_set("PS1", "%s> ");
 }

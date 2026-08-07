@@ -49,8 +49,10 @@ static int add_entry(const char *name, uint8_t type, uint32_t size,
 
 /* Ensure a path has a trailing backslash, writing into dst (size 64) */
 static void ensure_trailing(const char *src, char *dst) {
-    strncpy(dst, src, 63);
-    dst[63] = '\0';
+    if (dst != src) {
+        strncpy(dst, src, 63);
+        dst[63] = '\0';
+    }
     int len = strlen(dst);
     if (len > 0 && dst[len - 1] != '\\') {
         dst[len] = '\\';

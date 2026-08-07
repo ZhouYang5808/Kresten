@@ -78,16 +78,16 @@ void vga_put_char(int x, int y, char c, uint8_t color) {
 int vga_test(void) {
     vga_init();
     vga_clear();
-    vga_put_char(0, 0, 'M', 0x1F);
-    vga_put_char(1, 0, 'y', 0x1F);
-    vga_put_char(2, 0, 'O', 0x1F);
-    vga_put_char(3, 0, 'S', 0x1F);
+    vga_put_char(0, 0, 'K', 0x1F);
+    vga_put_char(1, 0, 'r', 0x1F);
+    vga_put_char(2, 0, 'e', 0x1F);
+    vga_put_char(3, 0, 's', 0x1F);
     uint16_t cell = VGA_MEM[0];
     printf("VGA test: %dx%d text mode, mem=0xB8000\n", VGA_COLS, VGA_ROWS);
-    printf("  cell[0]=0x%04X (expect 0x1F4D 'M' bright blue on blue)\n",
+    printf("  cell[0]=0x%04X (expect 0x1F4B 'K' bright blue on blue)\n",
            (unsigned)cell);
     printf("  color=0x%02X\n", (unsigned)vga_color);
-    if (cell == 0x1F4D)
+    if (cell == 0x1F4B)
         puts("  VGA status: OK\n");
     else
         puts("  VGA status: MISMATCH\n");

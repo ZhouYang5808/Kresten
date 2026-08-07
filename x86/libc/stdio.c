@@ -221,8 +221,14 @@ int vprintf(const char *fmt, va_list args) {
                 count += (width > len ? width : len);
             } else if (*fmt == 'u') {
                 unsigned int num = va_arg(args, unsigned int);
-                char buf[32]; itoa((int)num, buf, 10);
-                int len = strlen(buf);
+                char buf[32];
+                int len = 0;
+                do { buf[len++] = (char)('0' + num % 10); num /= 10; }
+                while (num && len < 31);
+                buf[len] = '\0';
+                for (int j = 0; j < len / 2; j++) {
+                    char t = buf[j]; buf[j] = buf[len - 1 - j]; buf[len - 1 - j] = t;
+                }
                 if (!left && width > 0 && len < width) {
                     char pad = zeropad ? '0' : ' ';
                     for (int i = 0; i < width - len; i++) putchar(pad);

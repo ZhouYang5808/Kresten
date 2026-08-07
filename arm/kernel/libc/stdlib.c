@@ -24,25 +24,21 @@ char *itoa(int num, char *buf, int base) {
     char temp[32];
     int i = 0;
     int is_negative = 0;
-    
+    unsigned int unum;
+
     if (base == 10 && num < 0) {
         is_negative = 1;
-        num = -num;
+        unum = (unsigned int)(-(num + 1)) + 1;
+    } else {
+        unum = (unsigned int)num;
     }
-    
-    if (num == 0) {
+
+    if (unum == 0) {
         temp[i++] = '0';
     } else {
-        // 用减法模拟除法，避免依赖库
-        while (num > 0) {
-            int n = num;
-            int quotient = 0;
-            while (n >= base) {
-                n -= base;
-                quotient++;
-            }
-            temp[i++] = digits[n];
-            num = quotient;
+        while (unum > 0) {
+            temp[i++] = digits[unum % (unsigned int)base];
+            unum /= (unsigned int)base;
         }
     }
     

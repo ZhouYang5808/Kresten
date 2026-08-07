@@ -8,16 +8,22 @@ int elf_load(const char *path, uint32_t *entry, uint32_t *heap) {
     char *data = fs_read_file_content(path);
     if (!data) { printf("elf: '%s' not found\n", path); return -1; }
 
+    uint32_t data_len = (uint32_t)strlen(data);
     Elf32Header *hdr = (Elf32Header *)data;
 
+    if (data_len < sizeof(Elf32Header)) { printf("elf: truncated header\n"); return -1; }
     if (hdr->magic != ELF_MAGIC) { printf("elf: bad magic\n"); return -1; }
     if (hdr->machine != 3) { printf("elf: not i386\n"); return -1; }
     if (hdr->type != 2) { printf("elf: not executable\n"); return -1; }
+    if (hdr->phentsize < sizeof(Elf32ProgramHeader) ||
+        (uint32_t)hdr->phnum * hdr->phentsize > data_len ||
+        hdr->phoff > data_len) { printf("elf: bad program headers\n"); return -1; }
 
     uint32_t max_addr = 0;
     for (int i = 0; i < hdr->phnum; i++) {
         Elf32ProgramHeader *ph = (Elf32ProgramHeader *)(data + hdr->phoff + i * hdr->phentsize);
         if (ph->type == PT_LOAD) {
+            if (ph->offset + ph->filesz > data_len) { printf("elf: segment outside file\n"); return -1; }
             uint32_t end = ph->vaddr + ph->memsz;
             if (end > max_addr) max_addr = end;
         }

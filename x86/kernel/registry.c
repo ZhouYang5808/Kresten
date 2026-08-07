@@ -75,6 +75,7 @@ static char *persist_base(void) {
 }
 
 static int persist_valid(void) {
+    if (!persist_addr) return 0;
     return *(unsigned int *)persist_base() == REG_PERSIST_MAGIC;
 }
 

@@ -50,7 +50,11 @@ int install_to_hdd(void) {
     uint32_t left = sectors;
     while (left > 0) {
         uint32_t n = left > 255 ? 255 : left;
-        memcpy(buf, __install_img + (lba - 1) * 512, n * 512);
+        uint32_t off = (lba - 1) * 512;
+        uint32_t avail = size > off ? size - off : 0;
+        uint32_t copy = avail > n * 512 ? n * 512 : avail;
+        memset(buf, 0, sizeof(buf));
+        memcpy(buf, __install_img + off, copy);
         if (ata_write_sectors(0, lba, (uint8_t)n, buf) < 0) {
             printf("[INSTALL] write failed at LBA %u\n", lba);
             return -1;
