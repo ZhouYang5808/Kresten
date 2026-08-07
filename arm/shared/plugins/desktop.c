@@ -17,26 +17,26 @@
 extern uint32_t sched_get_ticks(void);
 void sys_poweroff(void);
 
-/* ---- blue-white theme palette (indexes into gfx.c custom palette) ---- */
-#define C_DESK_TOP   16   /* desktop gradient: white -> light blue */
+/* ---- soft blue-white theme palette (indexes into gfx.c custom palette) ---- */
+#define C_DESK_TOP   16   /* desktop gradient: soft blue-white -> muted blue */
 #define C_DESK_BOT   31
-#define C_SURFACE    32   /* white panels, app content */
+#define C_SURFACE    32   /* soft blue-white panels, app content */
 #define C_SURFACE_HI 40
-#define C_BRIGHT     52   /* light blue hover / active surfaces */
-#define C_TAB_BG     32   /* white tab bar */
+#define C_BRIGHT     52   /* soft light-blue hover / active surfaces */
+#define C_TAB_BG     32   /* soft blue-white tab bar */
 #define C_TAB_HOVER  52
-#define C_TAB_ACTIVE 40
-#define C_ACCENT     70   /* accent blue */
+#define C_TAB_ACTIVE 48
+#define C_ACCENT     70   /* steady accent blue */
 #define C_ACCENT_DIM 66
 #define C_PURPLE     84
 #define C_TEAL       104
 #define C_ORANGE     118
 #define C_GREEN      134
 #define C_RED        148
-#define C_GRAY_HI    190  /* ink text: dark blue-gray */
+#define C_GRAY_HI    190  /* ink text: deep blue-black */
 #define C_GRAY_MID   210
 #define C_GRAY_LOW   225
-#define C_GRAY_DARK  205  /* borders / separators */
+#define C_GRAY_DARK  205  /* blue-gray borders / separators */
 #define C_BLACK      0
 #define C_WHITE      15
 

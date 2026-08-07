@@ -52,18 +52,22 @@ static void gfx_build_palette(void) {
     };
     for (int i = 0; i < 16; i++)
         vga_palette[i] = bgr565(p16[i * 3], p16[i * 3 + 1], p16[i * 3 + 2]);
-    /* 16-31: desktop gradient (white -> light blue) */
+    /* 16-31: desktop gradient (soft blue-white -> muted blue) */
     for (int i = 0; i < 16; i++)
-        vga_palette[16 + i] = bgr565(63 - i * 22 / 15, 63 - i * 11 / 15, 63);
-    /* 32-47: white surface gradient (panel/card base) */
+        vga_palette[16 + i] = bgr565(56 - i * 14 / 15, 58 - i * 9 / 15,
+                                     61 - i * 4 / 15);
+    /* 32-47: soft blue-white surface gradient (panel/card base) */
     for (int i = 0; i < 16; i++)
-        vga_palette[32 + i] = bgr565(63 - i * 9 / 15, 63 - i * 10 / 15, 63);
-    /* 48-63: light blue surface gradient (hover/active) */
+        vga_palette[32 + i] = bgr565(60 - i * 6 / 15, 60 - i * 4 / 15,
+                                     62 - i * 3 / 15);
+    /* 48-63: soft light-blue surface gradient (hover/active) */
     for (int i = 0; i < 16; i++)
-        vga_palette[48 + i] = bgr565(46 - i * 14 / 15, 57 - i * 8 / 15, 63);
-    /* 64-79: accent blue -> cyan */
+        vga_palette[48 + i] = bgr565(49 - i * 7 / 15, 54 - i * 6 / 15,
+                                     60 - i * 4 / 15);
+    /* 64-79: steady accent blue (deep -> medium) */
     for (int i = 0; i < 16; i++)
-        vga_palette[64 + i] = bgr565(14 + i * 9 / 15, 40 + i * 22 / 15, 63);
+        vga_palette[64 + i] = bgr565(11 + i * 12 / 15, 27 + i * 11 / 15,
+                                     45 + i * 8 / 15);
     /* 80-95: purple -> pink */
     for (int i = 0; i < 16; i++)
         vga_palette[80 + i] = bgr565(38 + i * 25 / 15, 23 + i * 9 / 15,
@@ -82,10 +86,11 @@ static void gfx_build_palette(void) {
     /* 144-159: red */
     for (int i = 0; i < 16; i++)
         vga_palette[144 + i] = bgr565(60, 7 + i * 11 / 15, 7 + i * 11 / 15);
-    /* 160-255: 96-step gray ramp (8 -> 63) */
+    /* 160-255: 96-step blue-gray ramp (deep blue-black -> blue-white) */
     for (int i = 0; i < 96; i++) {
         uint8_t gv = (uint8_t)(8 + i * 55 / 95);
-        vga_palette[160 + i] = bgr565(gv, gv, gv);
+        vga_palette[160 + i] = bgr565((gv > 4) ? gv - 4 : 0, gv,
+                                      (gv > 61) ? 63 : gv + 2);
     }
 }
 

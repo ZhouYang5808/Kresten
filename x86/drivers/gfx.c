@@ -402,29 +402,29 @@ static void gfx_set_palette(void) {
         rgb[i][1] = p16[i * 3 + 1];
         rgb[i][2] = p16[i * 3 + 2];
     }
-    /* 16-31: desktop gradient (white -> light blue) */
+    /* 16-31: desktop gradient (soft blue-white -> muted blue) */
     for (int i = 0; i < 16; i++) {
-        rgb[16 + i][0] = (uint8_t)(63 - i * 22 / 15);
-        rgb[16 + i][1] = (uint8_t)(63 - i * 11 / 15);
-        rgb[16 + i][2] = 63;
+        rgb[16 + i][0] = (uint8_t)(56 - i * 14 / 15);
+        rgb[16 + i][1] = (uint8_t)(58 - i * 9 / 15);
+        rgb[16 + i][2] = (uint8_t)(61 - i * 4 / 15);
     }
-    /* 32-47: white surface gradient (panel/card base) */
+    /* 32-47: soft blue-white surface gradient (panel/card base) */
     for (int i = 0; i < 16; i++) {
-        rgb[32 + i][0] = (uint8_t)(63 - i * 9 / 15);
-        rgb[32 + i][1] = (uint8_t)(63 - i * 10 / 15);
-        rgb[32 + i][2] = 63;
+        rgb[32 + i][0] = (uint8_t)(60 - i * 6 / 15);
+        rgb[32 + i][1] = (uint8_t)(60 - i * 4 / 15);
+        rgb[32 + i][2] = (uint8_t)(62 - i * 3 / 15);
     }
-    /* 48-63: light blue surface gradient (hover/active) */
+    /* 48-63: soft light-blue surface gradient (hover/active) */
     for (int i = 0; i < 16; i++) {
-        rgb[48 + i][0] = (uint8_t)(46 - i * 14 / 15);
-        rgb[48 + i][1] = (uint8_t)(57 - i * 8 / 15);
-        rgb[48 + i][2] = 63;
+        rgb[48 + i][0] = (uint8_t)(49 - i * 7 / 15);
+        rgb[48 + i][1] = (uint8_t)(54 - i * 6 / 15);
+        rgb[48 + i][2] = (uint8_t)(60 - i * 4 / 15);
     }
-    /* 64-79: accent blue -> cyan */
+    /* 64-79: steady accent blue (deep -> medium) */
     for (int i = 0; i < 16; i++) {
-        rgb[64 + i][0] = (uint8_t)(14 + i * 9 / 15);
-        rgb[64 + i][1] = (uint8_t)(40 + i * 22 / 15);
-        rgb[64 + i][2] = (uint8_t)63;
+        rgb[64 + i][0] = (uint8_t)(11 + i * 12 / 15);
+        rgb[64 + i][1] = (uint8_t)(27 + i * 11 / 15);
+        rgb[64 + i][2] = (uint8_t)(45 + i * 8 / 15);
     }
     /* 80-95: purple -> pink */
     for (int i = 0; i < 16; i++) {
@@ -456,12 +456,12 @@ static void gfx_set_palette(void) {
         rgb[144 + i][1] = (uint8_t)(7 + i * 11 / 15);
         rgb[144 + i][2] = (uint8_t)(7 + i * 11 / 15);
     }
-    /* 160-255: 96-step gray ramp (8 -> 63) */
+    /* 160-255: 96-step blue-gray ramp (deep blue-black -> blue-white) */
     for (int i = 0; i < 96; i++) {
         uint8_t g = (uint8_t)(8 + i * 55 / 95);
-        rgb[160 + i][0] = g;
+        rgb[160 + i][0] = (uint8_t)((g > 4) ? g - 4 : 0);
         rgb[160 + i][1] = g;
-        rgb[160 + i][2] = g;
+        rgb[160 + i][2] = (uint8_t)((g > 61) ? 63 : g + 2);
     }
     /* VGA DAC (6-bit) for 8bpp modes */
     outb(0x3C8, 0);
