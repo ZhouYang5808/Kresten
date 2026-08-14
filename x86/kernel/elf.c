@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <fs.h>
 
 int elf_load(const char *path, uint32_t *entry, uint32_t *heap) {
@@ -34,12 +35,12 @@ int elf_load(const char *path, uint32_t *entry, uint32_t *heap) {
     for (int i = 0; i < hdr->phnum; i++) {
         Elf32ProgramHeader *ph = (Elf32ProgramHeader *)(data + hdr->phoff + i * hdr->phentsize);
         if (ph->type == PT_LOAD) {
-            uint32_t mem = (uint32_t)malloc(ph->memsz);
+            void *mem = malloc(ph->memsz);
             if (!mem) { printf("elf: alloc failed\n"); return -1; }
-            memset((void *)mem, 0, ph->memsz);
-            memcpy((void *)mem, data + ph->offset, ph->filesz);
+            memset(mem, 0, ph->memsz);
+            memcpy(mem, data + ph->offset, ph->filesz);
             printf("  [LOAD] vaddr=0x%08x size=%u -> heap=0x%08x\n",
-                   ph->vaddr, ph->memsz, mem);
+                   ph->vaddr, ph->memsz, (uint32_t)(uintptr_t)mem);
         }
     }
 

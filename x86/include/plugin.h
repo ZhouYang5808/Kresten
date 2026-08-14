@@ -23,4 +23,8 @@ Plugin *plugin_find(const char *name);
 int plugin_dispatch(const char *cmd, const char *args);
 void plugin_list_all(void);
 
+/* vm plugin status queries (used by the desktop app) */
+int plugin_vm_available(void);
+const char *plugin_vm_status(void);
+
 #endif

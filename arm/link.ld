@@ -27,4 +27,10 @@ SECTIONS
         . += 0x96000;  /* 640x480 16bpp 显存 */
         _lcd_fb_end = .;
     }
+    /* LX busybox 镜像（2.1MB）: 放到显存之后、LX_IMG_BASE(0x400000) 之前,
+     * 与 guest 内存区不重叠。0x1A0000 + 0x211C28 = 0x3B1C28 < 0x400000。 */
+    . = 0x1A0000;
+    .lx_img : { *(.lx_img) }
+    . = ALIGN(4);
+    _lx_img_end = .;
 }

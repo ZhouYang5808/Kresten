@@ -97,7 +97,7 @@ typedef struct {
 
     /* process */
     void (*proc_init)(void);
-    int (*proc_create)(const char *name, uint32_t entry);
+    int (*proc_create)(const char *name, void (*entry)(void));
     void (*proc_yield)(void);
     void (*proc_exit)(int code);
     void (*proc_list)(void);

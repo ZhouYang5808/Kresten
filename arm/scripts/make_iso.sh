@@ -1,10 +1,10 @@
 #!/bin/bash
-# Build dist/kresten-arm.iso â€” Kresten release ISO (kernel + docs + run scripts).
+# Build dist/kresten-arm.iso â€?Kresten release ISO (kernel + docs + run scripts).
 # Note: versatilepb boots via -kernel; the ISO is the distribution medium.
 set -e
 cd "$(dirname "$0")/.."
 
-VERSION="1.0"
+VERSION="2.0"
 STAGE="build/iso"
 
 rm -rf "$STAGE"

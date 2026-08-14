@@ -3,29 +3,27 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <fs.h>
-#include <io.h>
 #include <plugin.h>
 #include <rtc.h>
 #include <env.h>
-#include <ata.h>
 #include <editor.h>
 #include <process.h>
-#include <driver.h>
-#include <registry.h>
 #include <net.h>
-#include <gfx.h>
+#include <driver.h>
 
 #define MAX_CMD_LEN 256
 #define MAX_PIPES 8
+#define MAX_REDIR 2
 
 void cmd_help(char *args);
 void cmd_echo(char *args);
 void cmd_ls(char *args);
 void cmd_clear(char *args);
 void cmd_reboot(char *args);
+void lx_sys_reboot(void);
 void sys_poweroff(void);
-void sys_reboot(void);
 void cmd_power(char *args);
+void cmd_exit(char *args);
 void cmd_cat(char *args);
 void cmd_date(char *args);
 void cmd_touch(char *args);
@@ -34,32 +32,30 @@ void cmd_write(char *args);
 void cmd_plugins(char *args);
 void cmd_mkdir(char *args);
 void cmd_rmdir(char *args);
+void cmd_ps(char *args);
+void cmd_yield(char *args);
 void cmd_cd(char *args);
 void cmd_pwd(char *args);
 void cmd_cp(char *args);
 void cmd_mv(char *args);
 void cmd_set(char *args);
 void cmd_unset(char *args);
-void cmd_disk(char *args);
 void cmd_edit(char *args);
-void cmd_ps(char *args);
-void cmd_yield(char *args);
 void cmd_sudo(char *args);
-void cmd_power(char *args);
-void cmd_drivers(char *args);
-void cmd_vgatest(char *args);
-void cmd_kbdtest(char *args);
-void cmd_reg(char *args);
-void cmd_gfx(char *args);
+void cmd_hello(char *args);
+int plugin_hello_cmd(char *args);
 void cmd_ifconfig(char *args);
 void cmd_ping(char *args);
+void cmd_nslookup(char *args);
 void cmd_fetch(char *args);
+void cmd_dhcp(char *args);
+void cmd_nettest(char *args);
+void cmd_drivers(char *args);
+void cmd_lcdtest(char *args);
+void cmd_kbdtest(char *args);
 void execute_command(char *cmdline);
 
 static int sudo_mode = 0;
-static volatile int shell_exit = 0;
-
-void cmd_exit(char *args);
 
 typedef struct {
     char *name;
@@ -75,6 +71,8 @@ static Command commands[] = {
     {"cls",    cmd_clear,  "Clear screen"},
     {"clear",  cmd_clear,  "Clear screen (alias: cls)"},
     {"reboot", cmd_reboot, "Reboot the system"},
+    {"power",  cmd_power,  "Power control: power off|reboot"},
+    {"exit",   cmd_exit,   "Exit to desktop"},
     {"type",   cmd_cat,    "Display file content"},
     {"cat",    cmd_cat,    "Display file content (alias: type)"},
     {"date",   cmd_date,   "Show current date/time"},
@@ -93,112 +91,42 @@ static Command commands[] = {
     {"mv",     cmd_mv,     "Move or rename a file (alias: move)"},
     {"set",    cmd_set,    "Set environment variable"},
     {"unset",  cmd_unset,  "Unset environment variable"},
-    {"disk",   cmd_disk,   "Show ATA disk info"},
     {"edit",   cmd_edit,   "Line editor"},
+    {"plugins", cmd_plugins, "List loaded plugins"},
     {"ps",     cmd_ps,     "List processes"},
     {"yield",  cmd_yield,  "Yield to other processes"},
-    {"plugins", cmd_plugins, "List loaded plugins"},
     {"sudo",   cmd_sudo,   "Execute command unconditionally"},
-    {"power",  cmd_power,  "Power control: power off|reboot"},
-    {"drivers", cmd_drivers, "List registered device drivers"},
-    {"vgatest", cmd_vgatest, "Test the VGA driver"},
-    {"kbdtest", cmd_kbdtest, "Test the keyboard driver"},
-    {"reg",     cmd_reg,     "Registry: reg get|set|del <key>"},
-    {"gfx",     cmd_gfx,     "Graphics: gfx on|off|fill x y w h c|pixel x y c"},
-    {"ifconfig", cmd_ifconfig, "Show network configuration"},
-    {"ping",    cmd_ping,    "Ping a host: ping <ip> [count]"},
-    {"fetch",   cmd_fetch,   "HTTP GET: fetch <host> [port] <path>"},
-    {"exit",    cmd_exit,    "Exit to desktop"},
+    {"hello",  cmd_hello,  "Test the hello plugin"},
+    {"ifconfig", cmd_ifconfig, "Show network interface configuration"},
+    {"netstat",  cmd_ifconfig, "Show network status (alias: ifconfig)"},
+    {"ping",     cmd_ping,     "Ping a host or IP (e.g. ping 10.0.2.2)"},
+    {"nslookup", cmd_nslookup, "Lookup domain name IP (e.g. nslookup httpbin.org)"},
+    {"fetch",    cmd_fetch,    "Fetch a web page over HTTP (e.g. fetch httpbin.org /ip)"},
+    {"get",      cmd_fetch,    "Fetch a web page over HTTP (alias: fetch)"},
+    {"dhcp",     cmd_dhcp,     "Request IP address via DHCP"},
+    {"nettest",  cmd_nettest,  "Run network self-test"},
+    {"drivers",  cmd_drivers,  "List registered device drivers"},
+    {"lcdtest",  cmd_lcdtest,  "Test the LCD driver (PL110)"},
+    {"kbdtest",  cmd_kbdtest,  "Test the keyboard driver (PL050)"},
     {NULL, NULL, NULL}
 };
 
-void cmd_ifconfig(char *args) {
-    (void)args;
-    net_ifconfig();
-}
-
-void cmd_ping(char *args) {
-    char target[64];
-    int count = 4;
-    if (args) {
-        const char *p = args;
-        while (*p == ' ')
-            p++;
-        int n = 0;
-        while (*p && *p != ' ' && n < 63)
-            target[n++] = *p++;
-        target[n] = '\0';
-        while (*p == ' ')
-            p++;
-        if (*p) {
-            int c = 0;
-            while (*p >= '0' && *p <= '9')
-                c = c * 10 + (*p++ - '0');
-            if (c > 0 && c < 100)
-                count = c;
-        }
-        if (!n) {
-            puts("usage: ping <ip> [count]\n");
-            return;
-        }
-        net_ping(target, count);
-    } else {
-        puts("usage: ping <ip> [count]\n");
-    }
-}
-
-void cmd_fetch(char *args) {
-    if (!args || !*args) {
-        puts("usage: fetch <host> [port] <path>\n");
-        return;
-    }
-    char host[64];
-    char path[128];
-    int port = 80;
-    const char *p = args;
-    while (*p == ' ')
-        p++;
-    int n = 0;
-    while (*p && *p != ' ' && n < 63)
-        host[n++] = *p++;
-    host[n] = '\0';
-    while (*p == ' ')
-        p++;
-    if (*p >= '0' && *p <= '9') {
-        int c = 0;
-        while (*p >= '0' && *p <= '9')
-            c = c * 10 + (*p++ - '0');
-        if (c > 0 && c < 65536)
-            port = c;
-        while (*p == ' ')
-            p++;
-    }
-    if (!n || !*p) {
-        puts("usage: fetch <host> [port] <path>\n");
-        return;
-    }
-    n = 0;
-    while (*p && n < 127)
-        path[n++] = *p++;
-    path[n] = '\0';
-    printf("fetching http://%s:%d%s\n", host, port, path);
-    net_fetch(host, port, path);
-}
-
-void cmd_exit(char *args) {
-    (void)args;
-    shell_exit = 1;
-}
-
 void cmd_help(char *args) {
     (void)args;
-    puts("\n=== Kresten Shell ===\n");
-    puts("Available commands:\n");
-    for (int i = 0; commands[i].name; i++)
-        printf("  %-8s %s\n", commands[i].name, commands[i].desc);
-    puts("  (pipe)    cmd1 | cmd2 - Pipe output\n");
-    puts("  (redir)   cmd > file - Redirect output\n");
-    putchar('\n');
+    puts("\nCommands:\n");
+    for (int i = 0; commands[i].name; i++) {
+        char up[32];
+        int j;
+        for (j = 0; commands[i].name[j] && j < 31; j++) {
+            unsigned char c = commands[i].name[j];
+            if (c >= 'a' && c <= 'z') c -= 32;
+            up[j] = c;
+        }
+        up[j] = '\0';
+        printf("  %-8s %s\n", up, commands[i].desc);
+    }
+    puts("\n  PIPE    cmd1 | cmd2 - Pipe output\n");
+    puts("  REDIR   cmd > file - Redirect output\n");
 }
 
 void cmd_echo(char *args) {
@@ -248,7 +176,8 @@ void cmd_clear(char *args) {
 
 void cmd_reboot(char *args) {
     (void)args;
-    sys_reboot();
+    puts("\nRebooting system...\n");
+    lx_sys_reboot();
 }
 
 void cmd_power(char *args) {
@@ -258,9 +187,11 @@ void cmd_power(char *args) {
              "  power reboot  - Restart the machine\n");
         return;
     }
+    while (*args && isspace(*args)) args++;
     char sub[16];
-    strncpy(sub, args, 15);
-    sub[15] = '\0';
+    int i = 0;
+    while (*args && !isspace(*args) && i < 15) sub[i++] = *args++;
+    sub[i] = '\0';
     if (strcasecmp(sub, "off") == 0 || strcasecmp(sub, "shutdown") == 0 ||
         strcasecmp(sub, "halt") == 0 || strcasecmp(sub, "poweroff") == 0) {
         sys_poweroff();
@@ -270,131 +201,6 @@ void cmd_power(char *args) {
         printf("power: unknown action '%s'\n", sub);
         puts("Usage: power off | reboot\n");
     }
-}
-
-void cmd_drivers(char *args) {
-    (void)args;
-    driver_list_all();
-}
-
-void cmd_vgatest(char *args) {
-    (void)args;
-    puts("\n========== VGA Driver Test ==========\n");
-    vga_test();
-    puts("========== VGA test complete ==========\n");
-}
-
-void cmd_gfx(char *args) {
-    char sub[16];
-    int i = 0;
-    while (args && args[i] && args[i] != ' ' && i < 15) {
-        sub[i] = args[i];
-        i++;
-    }
-    sub[i] = '\0';
-    while (args && args[i] == ' ') i++;
-
-    if (strcmp(sub, "on") == 0 || sub[0] == '\0') {
-        gfx_test();
-    } else if (strcmp(sub, "off") == 0) {
-        gfx_leave();
-        puts("[GFX] back to text mode\n");
-    } else if (strcmp(sub, "fill") == 0) {
-        int x = atoi(args + i);
-        while (args[i] && args[i] != ' ') i++;
-        while (args[i] == ' ') i++;
-        int y = atoi(args + i);
-        while (args[i] && args[i] != ' ') i++;
-        while (args[i] == ' ') i++;
-        int w = atoi(args + i);
-        while (args[i] && args[i] != ' ') i++;
-        while (args[i] == ' ') i++;
-        int h = atoi(args + i);
-        while (args[i] && args[i] != ' ') i++;
-        while (args[i] == ' ') i++;
-        int c = atoi(args + i);
-        if (gfx_active()) {
-            gfx_fill_rect(x, y, w, h, (uint8_t)c);
-            printf("[GFX] rect (%d,%d) %dx%d color=%d\n", x, y, w, h, c);
-        } else {
-            gfx_enter();
-            gfx_fill_rect(x, y, w, h, (uint8_t)c);
-            printf("[GFX] entered graphics, rect (%d,%d) %dx%d color=%d\n",
-                   x, y, w, h, c);
-        }
-    } else if (strcmp(sub, "pixel") == 0) {
-        int x = atoi(args + i);
-        while (args[i] && args[i] != ' ') i++;
-        while (args[i] == ' ') i++;
-        int y = atoi(args + i);
-        while (args[i] && args[i] != ' ') i++;
-        while (args[i] == ' ') i++;
-        int c = atoi(args + i);
-        if (!gfx_active()) {
-            gfx_enter();
-            printf("[GFX] entered graphics, pixel (%d,%d) color=%d\n", x, y, c);
-        }
-        gfx_pixel(x, y, (uint8_t)c);
-    } else {
-        puts("Usage: gfx on | off | fill <x> <y> <w> <h> <color> | pixel <x> <y> <color>\n");
-    }
-}
-
-void cmd_kbdtest(char *args) {
-    (void)args;
-    puts("\n========== Keyboard Driver Test ==========\n");
-    kbd_test();
-    puts("========== KBD test complete ==========\n");
-}
-
-void cmd_reg(char *args) {
-    if (!args || !*args) { reg_list(); return; }
-    char *p = args;
-    while (*p && isspace(*p)) p++;
-    char sub[16];
-    int i = 0;
-    while (*p && !isspace(*p) && i < 15) sub[i++] = *p++;
-    sub[i] = '\0';
-    while (*p && isspace(*p)) p++;
-    char *rest = p;
-    if (strcasecmp(sub, "list") == 0 || strcasecmp(sub, "dump") == 0) {
-        reg_list();
-        return;
-    }
-    if (strcasecmp(sub, "get") == 0) {
-        if (!*rest) { puts("Usage: reg get <key>\n"); return; }
-        char key[REG_KEY_MAX + 1];
-        i = 0;
-        while (*rest && !isspace(*rest) && i < REG_KEY_MAX) key[i++] = *rest++;
-        key[i] = '\0';
-        const char *v = reg_get(key);
-        if (v) printf("%s=%s\n", key, v);
-        else printf("reg: '%s' not found\n", key);
-        return;
-    }
-    if (strcasecmp(sub, "set") == 0) {
-        if (!*rest) { puts("Usage: reg set <key> <value>\n"); return; }
-        char key[REG_KEY_MAX + 1];
-        i = 0;
-        while (*rest && !isspace(*rest) && i < REG_KEY_MAX) key[i++] = *rest++;
-        key[i] = '\0';
-        while (*rest && isspace(*rest)) rest++;
-        if (!*rest) { puts("Usage: reg set <key> <value>\n"); return; }
-        if (reg_set(key, rest) == 0) printf("  %s = %s\n", key, rest);
-        else puts("reg: set failed (table full?)\n");
-        return;
-    }
-    if (strcasecmp(sub, "del") == 0 || strcasecmp(sub, "delete") == 0) {
-        if (!*rest) { puts("Usage: reg del <key>\n"); return; }
-        char key[REG_KEY_MAX + 1];
-        i = 0;
-        while (*rest && !isspace(*rest) && i < REG_KEY_MAX) key[i++] = *rest++;
-        key[i] = '\0';
-        if (reg_del(key) == 0) printf("  %s deleted\n", key);
-        else printf("reg: '%s' not found\n", key);
-        return;
-    }
-    puts("Usage: reg [list|get <key>|set <key> <value>|del <key>]\n");
 }
 
 void cmd_cat(char *args) {
@@ -447,6 +253,19 @@ void cmd_write(char *args) {
 void cmd_plugins(char *args) {
     (void)args;
     plugin_list_all();
+}
+
+void cmd_ps(char *args) {
+    (void)args;
+    puts("\n=== Processes ===\n");
+    proc_list();
+    putchar('\n');
+}
+
+void cmd_yield(char *args) {
+    (void)args;
+    puts("Yielding...\n");
+    proc_yield();
 }
 
 void cmd_mkdir(char *args) {
@@ -526,13 +345,6 @@ void cmd_unset(char *args) {
     else printf("  %s: not set\n", var);
 }
 
-void cmd_disk(char *args) {
-    (void)args;
-    puts("\n=== ATA Drives ===\n");
-    ata_print_info();
-    putchar('\n');
-}
-
 void cmd_edit(char *args) {
     if (!args || !*args) { puts("Usage: edit <filename>\n"); return; }
     char fn[64];
@@ -543,24 +355,116 @@ void cmd_edit(char *args) {
     editor_run(fn);
 }
 
-void cmd_ps(char *args) {
-    (void)args;
-    puts("\n=== Processes ===\n");
-    proc_list();
-    putchar('\n');
-}
-
-void cmd_yield(char *args) {
-    (void)args;
-    puts("Yielding...\n");
-    proc_yield();
-}
-
 void cmd_sudo(char *args) {
     if (!args || !*args) { puts("sudo: missing command\n"); return; }
     sudo_mode = 1;
     execute_command(args);
     sudo_mode = 0;
+}
+
+void cmd_hello(char *args) {
+    plugin_hello_cmd(args);
+}
+
+void cmd_ifconfig(char *args) {
+    (void)args;
+    net_ifconfig();
+}
+
+void cmd_ping(char *args) {
+    if (!args || !*args) {
+        puts("Usage: ping <host_or_ip> [count]\n");
+        return;
+    }
+    char target[64];
+    int count = 4;
+    char *p = args;
+    int i = 0;
+    while (*p && !isspace(*p) && i < 63) target[i++] = *p++;
+    target[i] = '\0';
+    while (*p && isspace(*p)) p++;
+    if (*p) count = atoi(p);
+    net_ping(target, count);
+}
+
+void cmd_nslookup(char *args) {
+    if (!args || !*args) {
+        puts("Usage: nslookup <domain>\n");
+        return;
+    }
+    char domain[64];
+    int i = 0;
+    while (*args && !isspace(*args) && i < 63) domain[i++] = *args++;
+    domain[i] = '\0';
+    net_nslookup(domain);
+}
+
+void cmd_fetch(char *args) {
+    if (!args || !*args) {
+        puts("Usage: fetch <host> [port] [path]  (e.g. fetch 10.0.2.2 8080 /)\n");
+        return;
+    }
+    char host[64];
+    char path[128] = "/";
+    int port = 80;
+    char *p = args;
+    int i = 0;
+    while (*p && !isspace(*p) && i < 63) host[i++] = *p++;
+    host[i] = '\0';
+    while (*p && isspace(*p)) p++;
+    if (*p) {
+        if (isdigit((unsigned char)*p)) {
+            port = atoi(p);
+            while (*p && !isspace(*p)) p++;
+            while (*p && isspace(*p)) p++;
+        }
+        if (*p) {
+            i = 0;
+            while (*p && !isspace(*p) && i < 127) path[i++] = *p++;
+            path[i] = '\0';
+        }
+    }
+    net_fetch(host, port, path);
+}
+
+void cmd_dhcp(char *args) {
+    (void)args;
+    net_dhcp();
+}
+
+void cmd_nettest(char *args) {
+    (void)args;
+    puts("\n========== Network Diagnostics ==========\n");
+    puts("[1] Interface configuration:\n");
+    net_ifconfig();
+    puts("\n[2] Pinging gateway 10.0.2.2:\n");
+    net_ping("10.0.2.2", 2);
+    puts("\n[3] DNS lookup httpbin.org:\n");
+    uint32_t ip = net_nslookup("httpbin.org");
+    if (ip != 0) {
+        puts("\n[4] HTTP fetch httpbin.org /ip:\n");
+        net_fetch("httpbin.org", 80, "/ip");
+    }
+    puts("\n========== Diagnostics complete ==========\n");
+}
+
+void cmd_drivers(char *args) {
+    (void)args;
+    driver_list_all();
+}
+
+void cmd_lcdtest(char *args) {
+    (void)args;
+    puts("\n========== LCD Driver Test ==========\n");
+    lcd_test();
+    puts("========== LCD test complete ==========\n");
+}
+
+void cmd_kbdtest(char *args) {
+    (void)args;
+    puts("\n========== Keyboard Driver Test ==========\n");
+    kbd_test();
+    puts("========== KBD test complete ==========\n");
 }
 
 static int run_command(char *cmdline) {
@@ -589,7 +493,6 @@ void execute_command(char *cmdline) {
     if (len > 0 && (cmdline[len-1] == '\n' || cmdline[len-1] == '\r'))
         cmdline[--len] = '\0';
     if (len == 0) return;
-
     char expanded[512];
     char *exp = env_expand(cmdline);
     strncpy(expanded, exp ? exp : cmdline, 511);
@@ -639,8 +542,9 @@ void execute_command(char *cmdline) {
             set_output_capture(pipe_buf[pi - 1], 1024);
             int r = run_command(part);
             end_output_capture();
-            if (r != 0 && pi == npipes - 1)
+            if (r != 0 && pi == npipes - 1) {
                 printf("%s: command not found\nType 'help' for available commands.\n", part);
+            }
         } else if (npipes > 1) {
             set_output_capture(pipe_buf[0], 1024);
             int r = run_command(part);
@@ -666,8 +570,8 @@ void execute_command(char *cmdline) {
             char *content = 0;
             if (fs_resolve_path(redir_file, redir_res, sizeof(redir_res)))
                 content = fs_read_file_content(redir_res);
+            char newargs[128];
             if (content) {
-                char newargs[128];
                 char *np = part;
                 while (*np && !isspace(*np)) np++;
                 while (*np && isspace(*np)) np++;
@@ -691,8 +595,9 @@ void execute_command(char *cmdline) {
             }
         } else {
             int r = run_command(part);
-            if (r != 0)
+            if (r != 0) {
                 printf("%s: command not found\nType 'help' for available commands.\n", part);
+            }
         }
     }
 
@@ -733,20 +638,28 @@ void execute_command(char *cmdline) {
                 }
             }
         }
-        if (r != 0 && pi == npipes - 1)
+        if (r != 0 && pi == npipes - 1) {
             printf("%s: command not found\nType 'help' for available commands.\n", part);
+        }
     }
+}
+
+static volatile int shell_exit = 0;
+
+void cmd_exit(char *args) {
+    (void)args;
+    shell_exit = 1;
 }
 
 int shell_run(void) {
     shell_exit = 0;
+    char cmdline[MAX_CMD_LEN];
     puts("\n");
     puts("=============================================\n");
     puts("  Kresten Command Shell v1.0\n");
     puts("  Type 'help' for available commands\n");
     puts("  Type 'exit' to return to the desktop\n");
     puts("=============================================\n\n");
-    char cmdline[MAX_CMD_LEN];
     while (!shell_exit) {
         printf("%s> ", fs_get_cwd());
         gets(cmdline, MAX_CMD_LEN);

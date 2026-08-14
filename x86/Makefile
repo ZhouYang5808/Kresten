@@ -5,18 +5,17 @@ DIST_DIR = $(TOP_DIR)/dist
 CC = gcc
 AS = as
 LD = ld
-CFLAGS = -m32 -nostdlib -ffreestanding -Wall -Werror -DX86_ARCH \
-         -I$(TOP_DIR)/include -I$(TOP_DIR)/shared -I$(TOP_DIR)/kernel/drivers
-ASFLAGS = --32
-LDFLAGS = -melf_i386 -T link.ld
+CFLAGS = -m64 -nostdlib -ffreestanding -fno-pie -mno-red-zone -Wall -Werror -DX86_ARCH \
+         -I$(TOP_DIR)/include -I$(TOP_DIR)/kernel/drivers
+ASFLAGS = --64
+LDFLAGS = -melf_x86_64 -T link.ld
 
 ARCH_S_SRCS = $(TOP_DIR)/arch/boot.s $(TOP_DIR)/arch/interrupt.s $(TOP_DIR)/arch/switch.s $(TOP_DIR)/arch/mbr_data.s
 ARCH_C_SRCS = $(wildcard $(TOP_DIR)/arch/*.c)
 KERNEL_SRCS = $(wildcard $(TOP_DIR)/kernel/*.c)
 LIBC_SRCS   = $(wildcard $(TOP_DIR)/libc/*.c)
 DRIVER_SRCS = $(wildcard $(TOP_DIR)/drivers/*.c)
-PLUGIN_SRCS = $(wildcard $(TOP_DIR)/plugins/*.c)
-SHARED_SRCS = $(TOP_DIR)/shared/plugins/desktop.c $(TOP_DIR)/shared/drivers/ps2packet.c
+PLUGIN_SRCS = $(wildcard $(TOP_DIR)/plugins/kernel/*.c) $(wildcard $(TOP_DIR)/plugins/runtime/*.c) $(wildcard $(TOP_DIR)/plugins/user/*.c)
 CRT_TABLE_LD = $(TOP_DIR)/crt_compressed.ld
 
 ARCH_S_OBJS = $(patsubst $(TOP_DIR)/%.s,$(BUILD_DIR)/%.o,$(ARCH_S_SRCS))
@@ -25,10 +24,9 @@ KERNEL_OBJS = $(patsubst $(TOP_DIR)/%.c,$(BUILD_DIR)/%.o,$(KERNEL_SRCS))
 LIBC_OBJS   = $(patsubst $(TOP_DIR)/%.c,$(BUILD_DIR)/%.o,$(LIBC_SRCS))
 DRIVER_OBJS = $(patsubst $(TOP_DIR)/%.c,$(BUILD_DIR)/%.o,$(DRIVER_SRCS))
 PLUGIN_OBJS = $(patsubst $(TOP_DIR)/%.c,$(BUILD_DIR)/%.o,$(PLUGIN_SRCS))
-SHARED_OBJS = $(patsubst $(TOP_DIR)/shared/%.c,$(BUILD_DIR)/shared/%.o,$(SHARED_SRCS))
 
 OBJS = $(ARCH_S_OBJS) $(ARCH_C_OBJS) $(KERNEL_OBJS) $(LIBC_OBJS) \
-       $(DRIVER_OBJS) $(PLUGIN_OBJS) $(SHARED_OBJS)
+       $(DRIVER_OBJS) $(PLUGIN_OBJS)
 TARGET = $(DIST_DIR)/kernel.elf
 
 all: $(TARGET)
@@ -41,10 +39,6 @@ $(BUILD_DIR)/%.o: $(TOP_DIR)/%.s
 	$(AS) $(ASFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(TOP_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/shared/%.o: $(TOP_DIR)/shared/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 

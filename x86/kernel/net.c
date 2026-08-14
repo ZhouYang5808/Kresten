@@ -251,7 +251,7 @@ static void net_thread(void) {
 }
 
 void net_thread_start(void) {
-    proc_create("net", (uint32_t)net_thread);
+    proc_create("net", net_thread);
 }
 
 void ip_to_str(uint32_t ip, char *buf) {

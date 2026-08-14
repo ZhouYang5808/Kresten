@@ -123,7 +123,7 @@ void fs_print_drives(void) {
 
 int fs_read(DiskDrive *drive, uint32_t offset, void *buf, uint32_t size) {
     if (!drive || offset + size > drive->size) return -1;
-    volatile uint8_t *src = (volatile uint8_t *)(drive->base + offset);
+    volatile uint8_t *src = (volatile uint8_t *)(uintptr_t)(drive->base + offset);
     uint8_t *dst = (uint8_t *)buf;
     for (uint32_t i = 0; i < size; i++) dst[i] = src[i];
     return (int)size;
@@ -131,7 +131,7 @@ int fs_read(DiskDrive *drive, uint32_t offset, void *buf, uint32_t size) {
 
 int fs_write(DiskDrive *drive, uint32_t offset, const void *buf, uint32_t size) {
     if (!drive || offset + size > drive->size) return -1;
-    volatile uint8_t *dst = (volatile uint8_t *)(drive->base + offset);
+    volatile uint8_t *dst = (volatile uint8_t *)(uintptr_t)(drive->base + offset);
     const uint8_t *src = (const uint8_t *)buf;
     for (uint32_t i = 0; i < size; i++) dst[i] = src[i];
     if (offset + size > drive->used) drive->used = offset + size;
@@ -140,12 +140,12 @@ int fs_write(DiskDrive *drive, uint32_t offset, const void *buf, uint32_t size) 
 
 uint8_t fs_read_byte(DiskDrive *drive, uint32_t offset) {
     if (!drive || offset >= drive->size) return 0;
-    return *(volatile uint8_t *)(drive->base + offset);
+    return *(volatile uint8_t *)(uintptr_t)(drive->base + offset);
 }
 
 int fs_write_byte(DiskDrive *drive, uint32_t offset, uint8_t value) {
     if (!drive || offset >= drive->size) return -1;
-    *(volatile uint8_t *)(drive->base + offset) = value;
+    *(volatile uint8_t *)(uintptr_t)(drive->base + offset) = value;
     if (offset + 1 > drive->used) drive->used = offset + 1;
     return 0;
 }

@@ -10,24 +10,27 @@
 typedef enum { PROC_READY, PROC_RUNNING, PROC_WAITING, PROC_EXITED } ProcState;
 
 typedef struct {
-    uint32_t eip;
-    uint32_t esp;
-    uint32_t ebp;
-    uint32_t edi;
-    uint32_t esi;
-    uint32_t ebx;
+    uint64_t rip;
+    uint64_t rsp;
+    uint64_t rbp;
+    uint64_t r12;
+    uint64_t r15;
+    uint64_t r14;
+    uint64_t r13;
+    uint64_t rbx;
+    uint64_t rflags;
 } __attribute__((packed)) Context;
 
 typedef struct {
     char name[PROC_NAME_LEN];
     ProcState state;
     Context context;
-    uint32_t entry;
+    uint64_t entry;
     void *stack;
 } Process;
 
 void proc_init(void);
-int proc_create(const char *name, uint32_t entry);
+int proc_create(const char *name, void (*entry)(void));
 void proc_yield(void);
 void proc_exit(int code);
 void proc_list(void);

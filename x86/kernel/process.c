@@ -16,27 +16,32 @@ void proc_init(void) {
 }
 
 void proc_entry(Process *p) {
-    void (*entry)(void) = (void (*)(void))p->entry;
+    void (*entry)(void) = (void (*)(void))(uintptr_t)p->entry;
     entry();
 }
 
-int proc_create(const char *name, uint32_t entry) {
+int proc_create(const char *name, void (*entry)(void)) {
     if (proc_count >= MAX_PROC) return -1;
     Process *p = &procs[proc_count];
     strncpy(p->name, name, PROC_NAME_LEN - 1);
     p->name[PROC_NAME_LEN - 1] = '\0';
     p->state = PROC_READY;
-    p->entry = entry;
+    p->entry = (uint64_t)(uintptr_t)entry;
     p->stack = malloc(PROC_STACK_SIZE);
     if (!p->stack) return -1;
-    uint32_t *sp = (uint32_t *)((char *)p->stack + PROC_STACK_SIZE);
-    *--sp = (uint32_t)p;
-    p->context.eip = (uint32_t)proc_entry_wrapper;
-    p->context.esp = (uint32_t)sp;
-    p->context.ebp = 0;
-    p->context.edi = 0;
-    p->context.esi = 0;
-    p->context.ebx = 0;
+    uint64_t *sp = (uint64_t *)((char *)p->stack + PROC_STACK_SIZE);
+    *--sp = (uint64_t)(uintptr_t)p;
+    p->context.rip = (uint64_t)(uintptr_t)proc_entry_wrapper;
+    p->context.rsp = (uint64_t)(uintptr_t)sp;
+    p->context.rbp = 0;
+    p->context.r12 = 0;
+    p->context.r15 = 0;
+    p->context.r14 = 0;
+    p->context.r13 = 0;
+    p->context.rbx = 0;
+    /* IF=0：首次进入以关中断跑启动链（proc_entry -> lx_thread_main ->
+     * iretq 弹 RFLAGS=0x202 进用户态 IF=1），syscall 处理不被 PIT 打断 */
+    p->context.rflags = 0x2;
     proc_count++;
     return proc_count - 1;
 }
@@ -57,7 +62,8 @@ void proc_exit(int code) {
     (void)code;
     Process *p = &procs[current];
     p->state = PROC_EXITED;
-    if (p->stack) free(p->stack);
+    /* 不能 free 当前进程的栈：CPU 正用它执行（proc_exit 自身的帧在栈上），
+     * 释放后堆管理器写链表头会覆盖活跃帧，导致下一次中断/恢复全 0 而 iretq #GP。 */
     p->stack = 0;
     for (int i = 0; i < proc_count; i++) {
         if (i != current && procs[i].state == PROC_READY) {

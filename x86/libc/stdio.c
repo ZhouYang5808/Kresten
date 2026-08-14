@@ -45,7 +45,7 @@ void serial_init(void) {
 
 void putchar(char c) {
     uint32_t f;
-    __asm__ volatile ("pushfl; popl %0; cli" : "=r"(f));
+    __asm__ volatile ("pushfq; popq %%rax; cli" : "=a"(f) : : );
     if (capture_active && capture_buf && capture_pos < capture_max) {
         capture_buf[capture_pos++] = c;
         if (f & 0x200) __asm__ volatile ("sti");
@@ -260,8 +260,9 @@ int vprintf(const char *fmt, va_list args) {
                 count += (width > len ? width : len);
             } else if (*fmt == 'p') {
                 putchar('0'); putchar('x');
-                unsigned int num = (unsigned int)va_arg(args, void *);
-                print_hex(num); count += 10;
+                unsigned long num = (unsigned long)va_arg(args, void *);
+                if (sizeof(void *) == 8) { print_hex((unsigned int)(num >> 32)); print_hex((unsigned int)(num & 0xFFFFFFFF)); count += 18; }
+                else { print_hex((unsigned int)num); count += 10; }
             } else if (*fmt == '%') {
                 putchar('%'); count++;
             } else {

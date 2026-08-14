@@ -41,16 +41,16 @@ void reg_persist_setup(uint32_t mb_info) {
     persist_addr = 0;
     uint32_t best_base = 0, best_len = 0;
     if (mb_info) {
-        uint32_t flags = *(uint32_t *)mb_info;
+        uint32_t flags = *(uint32_t *)(uintptr_t)mb_info;
         if (flags & 0x40) {
-            uint32_t mmap_addr = *(uint32_t *)(mb_info + 48);
-            uint32_t mmap_end = mmap_addr + *(uint32_t *)(mb_info + 44);
+            uint32_t mmap_addr = *(uint32_t *)(uintptr_t)(mb_info + 48);
+            uint32_t mmap_end = mmap_addr + *(uint32_t *)(uintptr_t)(mb_info + 44);
             uint32_t p = mmap_addr;
             while (p + 24 <= mmap_end) {
-                uint32_t size = *(uint32_t *)p;
-                uint32_t base = *(uint32_t *)(p + 4);
-                uint32_t len = *(uint32_t *)(p + 12);
-                uint32_t type = *(uint32_t *)(p + 20);
+                uint32_t size = *(uint32_t *)(uintptr_t)p;
+                uint32_t base = *(uint32_t *)(uintptr_t)(p + 4);
+                uint32_t len = *(uint32_t *)(uintptr_t)(p + 12);
+                uint32_t type = *(uint32_t *)(uintptr_t)(p + 20);
                 if (type == 1 && base >= 0x100000 && len >= 0x10000) {
                     if (base > best_base) {
                         best_base = base;
@@ -71,7 +71,7 @@ void reg_persist_setup(uint32_t mb_info) {
 }
 
 static char *persist_base(void) {
-    return (char *)persist_addr;
+    return (char *)(uintptr_t)persist_addr;
 }
 
 static int persist_valid(void) {

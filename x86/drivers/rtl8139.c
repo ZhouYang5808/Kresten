@@ -101,10 +101,10 @@ int rtl8139_init(void) {
     rx_ring = (uint8_t *)malloc(RX_BUF_SIZE + 4095);
     if (!rx_ring)
         return -1;
-    rx_ring = (uint8_t *)(((uint32_t)rx_ring + 4095) & ~(uint32_t)4095);
+    rx_ring = (uint8_t *)(((uintptr_t)rx_ring + 4095) & ~(uintptr_t)4095);
     memset(rx_ring, 0, RX_BUF_SIZE);
 
-    outl(io_base + RTL_RBSTART, (uint32_t)rx_ring);
+    outl(io_base + RTL_RBSTART, (uint32_t)(uintptr_t)rx_ring);
     outw(io_base + RTL_CAPR, 0);
     outb(io_base + RTL_CONFIG1, inb(io_base + RTL_CONFIG1) & 0xFB);
     outl(io_base + RTL_TCR, 0x00);
@@ -127,7 +127,7 @@ const uint8_t *rtl8139_get_mac(void) {
 int rtl8139_send(const uint8_t *frame, uint16_t len) {
     if (len < 14 || len > 1514)
         return -1;
-    outl(io_base + RTL_TSAD0 + tx_cur * 4, (uint32_t)frame);
+    outl(io_base + RTL_TSAD0 + tx_cur * 4, (uint32_t)(uintptr_t)frame);
     outl(io_base + RTL_TSD0 + tx_cur * 4, len);
     tx_cur = (tx_cur + 1) & 3;
     tx_count++;

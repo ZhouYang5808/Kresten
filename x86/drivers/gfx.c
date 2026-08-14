@@ -350,7 +350,7 @@ static int svga_enter(void) {
             printf("[SVGA] FAIL: bad mem_start\n");
             return -1;
         }
-        svga_fifo = (volatile uint32_t *)mem_start;
+        svga_fifo = (volatile uint32_t *)(uintptr_t)mem_start;
         svga_fifo[0] = SVGA_FIFO_MIN_BYTE;              /* SVGA_FIFO_MIN */
         svga_fifo[1] = SVGA_FIFO_MIN_BYTE + 16 * 1024;  /* SVGA_FIFO_MAX */
         svga_fifo[2] = SVGA_FIFO_MIN_BYTE;              /* SVGA_FIFO_NEXT */
@@ -375,7 +375,7 @@ static int svga_enter(void) {
     /* the device may clamp the mode: trust the post-enable readback */
     if (rb_w >= 640 && rb_h >= 480 && rb_w <= max_w && rb_h <= max_h)
         mode_w = rb_w, mode_h = rb_h;
-    scr_mem = (volatile uint8_t *)(svga_fb_start + svga_fb_off);
+    scr_mem = (volatile uint8_t *)(uintptr_t)(svga_fb_start + svga_fb_off);
     scr_w = (int)mode_w;
     scr_h = (int)mode_h;
     bpp = 4;
@@ -494,7 +494,7 @@ static void gfx_restore_font(void) {
     outb(0x3CE, 0x06); outb(0x3CF, 0x04); /* GRA6: 0xA0000 64K window */
     outb(0x3CE, 0x04); outb(0x3CF, 0x02); /* GRA4: write plane 2 */
     for (int i = 0; i < 8192; i++)
-        *(volatile uint8_t *)(0xA0000 + i) = font_buf[i];
+        *(volatile uint8_t *)(uintptr_t)(0xA0000 + i) = font_buf[i];
     outb(0x3C4, 0x02); outb(0x3C5, 0x03); /* restore S2 map mask (text mode) */
     outb(0x3C4, 0x04); outb(0x3C5, 0x02);
     outb(0x3CE, 0x04); outb(0x3CF, 0x00);
@@ -541,7 +541,7 @@ int gfx_enter(void) {
     }
     if (use_vbe) {
         uint32_t lfb = pci_find_vga_lfb();
-        scr_mem = (volatile uint8_t *)(lfb ? lfb : (uint32_t)VBE_LFB);
+        scr_mem = (volatile uint8_t *)(uintptr_t)(lfb ? lfb : (uint32_t)(uintptr_t)VBE_LFB);
         scr_w = 640;
         scr_h = 480;
         bpp = 1;

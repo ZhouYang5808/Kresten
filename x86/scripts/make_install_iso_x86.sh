@@ -5,7 +5,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-VERSION="1.0"
+VERSION="2.0"
 STAGE="build/isox86-install"
 
 rm -rf "$STAGE"

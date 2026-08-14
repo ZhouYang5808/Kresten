@@ -51,7 +51,9 @@ int sched_init(void);
 int sched_create(const char *name, void (*entry)(void));
 void sched_yield(void);
 int sched_get_mode(void);
+int sched_set_mode(int mode);
 void sched_apply_registry(void);
+void sched_dump_state(void);
 extern volatile uint32_t sched_ticks;
 
 #endif

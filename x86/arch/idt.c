@@ -10,8 +10,10 @@
 #define ICW1_ICW4  0x11
 #define ICW1_INIT  0x10
 
-extern uint32_t isr_stub_table[];
-extern uint32_t irq_stub_table[];
+extern uint64_t isr_stub_table[];
+extern uint64_t irq_stub_table[];
+
+void sched_dump_state(void);
 
 static idt_entry_t idt[256];
 static idt_ptr_t idt_ptr;
@@ -52,12 +54,14 @@ static const char *exception_msgs[32] = {
     "Reserved"
 };
 
-static void idt_set_entry(int n, uint32_t base, uint16_t sel, uint8_t flags) {
+static void idt_set_entry(int n, uint64_t base, uint16_t sel, uint8_t flags) {
     idt[n].offset_low = base & 0xFFFF;
     idt[n].selector = sel;
-    idt[n].zero = 0;
+    idt[n].ist = 0;
     idt[n].type_attr = flags;
-    idt[n].offset_high = (base >> 16) & 0xFFFF;
+    idt[n].offset_mid = (base >> 16) & 0xFFFF;
+    idt[n].offset_high = (uint32_t)(base >> 32);
+    idt[n].zero = 0;
 }
 
 static void pic_remap(void) {
@@ -80,7 +84,7 @@ static void pic_send_eoi(int irq_no) {
 
 void idt_init(void) {
     idt_ptr.limit = sizeof(idt) - 1;
-    idt_ptr.base = (uint32_t)&idt;
+    idt_ptr.base = (uint64_t)idt;
     for (int i = 0; i < 256; i++)
         idt_set_entry(i, 0, 0, 0);
     for (int i = 0; i < 32; i++)
@@ -95,15 +99,30 @@ void idt_init(void) {
 }
 
 void isr_handler(registers_t *r) {
-    printf("[EXCEPTION] %s (int 0x%x, err 0x%x)\n", exception_msgs[r->int_no], r->int_no, r->err_code);
-    printf("  EIP=0x%08x CS=0x%04x EFLAGS=0x%08x\n", r->eip, r->cs, r->eflags);
-    printf("  EAX=0x%08x EBX=0x%08x ECX=0x%08x EDX=0x%08x\n", r->eax, r->ebx, r->ecx, r->edx);
-    printf("  ESP=0x%08x EBP=0x%08x ESI=0x%08x EDI=0x%08x\n", r->esp, r->ebp, r->esi, r->edi);
+    uint64_t cr2 = 0;
+    if (r->int_no == 14)
+        __asm__ volatile ("mov %%cr2, %0" : "=r"(cr2));
+    printf("[EXCEPTION] %s (int 0x%x, err 0x%x)\n", exception_msgs[r->int_no], (unsigned)r->int_no, (unsigned)r->err_code);
+    printf("  RIP=0x%08x%08x CS=0x%04x EFLAGS=0x%08x",
+           (unsigned)(r->rip >> 32), (unsigned)r->rip, (unsigned)r->cs, (unsigned)r->eflags);
+    if (r->int_no == 14) printf(" CR2=0x%08x%08x", (unsigned)(cr2 >> 32), (unsigned)cr2);
+    printf("\n");
+    printf("  RAX=0x%08x%08x RBX=0x%08x%08x RCX=0x%08x%08x RDX=0x%08x%08x\n",
+           (unsigned)(r->rax >> 32), (unsigned)r->rax,
+           (unsigned)(r->rbx >> 32), (unsigned)r->rbx,
+           (unsigned)(r->rcx >> 32), (unsigned)r->rcx,
+           (unsigned)(r->rdx >> 32), (unsigned)r->rdx);
+    printf("  RSP=0x%08x%08x RBP=0x%08x%08x RSI=0x%08x%08x RDI=0x%08x%08x\n",
+           (unsigned)(r->rsp >> 32), (unsigned)r->rsp,
+           (unsigned)(r->rbp >> 32), (unsigned)r->rbp,
+           (unsigned)(r->rsi >> 32), (unsigned)r->rsi,
+           (unsigned)(r->rdi >> 32), (unsigned)r->rdi);
+    sched_dump_state();
     for (;;) { __asm__ volatile ("cli; hlt"); }
 }
 
 void irq_handler(registers_t *r) {
-    int irq = r->int_no - 32;
+    int irq = (int)(r->int_no - 32);
     if (irq >= 0 && irq < 16 && irq_handlers[irq])
         irq_handlers[irq](r);
     pic_send_eoi(irq);

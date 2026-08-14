@@ -1,112 +1,120 @@
-# Kresten
+# Kresten v2.0
 
-A small hobby operating system, written from scratch, for two architectures:
-**x86** (multiboot kernel with a tabbed browser-style GUI desktop and a real
-installer that writes itself to a hard disk) and **ARM** (Versatile PB,
-semihosted console build).
+A small hobby operating system, written from scratch, for three architectures:
+**x86** (x86-64 kernel with a tabbed browser-style GUI desktop, a real
+installer that writes itself to a hard disk, and an Intel VT-x hypervisor),
+**ARM** (Versatile PB, semihosted console build) and **RISC-V** (QEMU virt,
+U-mode guest / M-mode kernel isolation).
 
-The x86 build boots via GRUB (multiboot v1) and includes its own 512-byte MBR
-boot sector that loads the kernel from the hard disk in protected mode via
-raw ATA PIO — no BIOS disk services, no second-stage bootloader.
+Each build ships with the **Linux subsystem (LX)** — a WSL1-style binary
+compatibility layer that translates Linux syscalls to Kresten kernel
+services, running a statically linked busybox `ash` shell interactively.
 
 ## Features
 
-- **Kernel** — i386 multiboot kernel linked at 1 MB (`link.ld`), GDT/IDT,
-  IRQ handling, preemptive round-robin scheduler (PIT 100 Hz)
-- **Tabbed desktop GUI** — fullscreen browser-style tabs, dark theme,
-  App Manager launcher (mouse + keyboard navigation), Shell terminal,
-  FMGR file list, My Computer, Recycle Bin; Terminus 8x16 bitmap font
-- **Graphics** — VMware SVGA (32 bpp), VESA VBE (8 bpp), mode 13h fallback;
-  auto-fit resolutions (640x480, 800x600, up to 1280x768)
-- **Drivers** — ATA PIO disk, PS/2 keyboard + mouse, RTC
-- **Plugin system** — plugins are linked into the kernel image and
-  discovered via the `.plugins` linker section
-- **Registry** — simple key/value registry persisted to a RAM region chosen
-  from the multiboot memory map
-- **Installer** — `make iso` also builds an installer ISO that detects the
-  first ATA drive, writes the 512-byte MBR boot sector + kernel image to it,
-  then reboots automatically into the installed system
-- **Minimal libc** — stdio / stdlib / string / ctype, kernel-friendly
+| | x86 | ARM | RISC-V |
+|---|---|---|---|
+| Kernel | x86-64 long mode (`-m64`), PML4 paging | ARM32 (armv5te) | RV64 (rv64gc) |
+| Guest isolation | ring0 flat (WSL1-style) | USR mode (svc traps) | **U-mode + M-mode traps** |
+| Tabbed desktop GUI | yes | yes | yes |
+| Preemptive scheduler (100 Hz) | PIT | CLINT | CLINT |
+| ATA PIO disk / installer | yes | - | - |
+| CD-ROM (iso9660) + `cdrom` cmd | yes | - | - |
+| Registry | yes | - | - |
+| NIC + TCP/IP stack | rtl8139 | SMC91C111 | stub (no NIC) |
+| VT-x hypervisor | yes (VMX/EPT) | - | - |
+| VM plugin (software mode) | fallback on TCG | yes | yes |
+| Linux subsystem (LX) | x86-64 busybox | ARM32 busybox | RV64 busybox |
+| LX: interactive ash | yes | yes | yes (termios2 + ppoll) |
+| LX: `/mnt/cdrom` | yes | - | - |
+
+## Build (Windows, one command per architecture)
+
+| Script | Location | Produces |
+|---|---|---|
+| `build_iso.ps1` | repo root | `Desktop\kresten-x86.iso` (GRUB-bootable) + `Desktop\kresten-x86-install.iso` (installer) |
+| `build_arm.ps1` | repo root | `Desktop\kresten-arm.iso` (distribution: kernel + README + RUN scripts) |
+| `build_rv64.ps1` | repo root | `Desktop\kresten-riscv.iso` + `Kresten\riscv\dist\kernel.elf` |
+
+All scripts stage the sources through
+`C:\Users\Lenovo\AppData\Local\Temp\opencode\` (relay), build inside WSL,
+and copy the results to the Desktop.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "C:\Users\Lenovo\Documents\New OpenCode Project\build_iso.ps1"
+powershell -ExecutionPolicy Bypass -File "C:\Users\Lenovo\Documents\New OpenCode Project\build_arm.ps1"
+powershell -ExecutionPolicy Bypass -File "C:\Users\Lenovo\Documents\New OpenCode Project\build_rv64.ps1"
+```
+
+## Build (Linux / WSL)
+
+```sh
+cd x86 && make && make iso        # dist/kresten-x86.iso + dist/kresten-x86-install.iso
+cd arm && make && make iso        # dist/kresten-arm.iso
+cd riscv && make && make iso      # dist/kresten-riscv.iso
+```
+
+## Per-architecture scripts
+
+| Architecture | Scripts |
+|---|---|
+| x86 | `x86/scripts/rebuild.sh` (WSL make + ISO), `make_iso_x86.sh` (GRUB ISO), `make_install_iso_x86.sh` (installer ISO), `pack_install_img.py` (kernel → install image, `.install_img` at 0xE04000), `gen_vm_guest.sh` + `vm_guest.asm` (VT-x guest) |
+| ARM | `arm/scripts/make_iso.sh` (distribution ISO), `gen_crt_table.py` (crt_compressed.ld) |
+| RISC-V | `riscv/scripts/make_iso.sh` (distribution ISO), `gen_crt_table.py` |
+
+## Run (QEMU)
+
+```sh
+# x86: regular ISO
+qemu-system-x86_64 -m 128M -cdrom dist/kresten-x86.iso -boot d -vga vmware
+# x86: install to a virtual disk, then boot from it
+qemu-system-x86_64 -m 128M -hda install.img -cdrom dist/kresten-x86-install.iso -boot once=d,order=c -vga vmware
+
+# ARM (Versatile PB)
+qemu-system-arm -machine versatilepb -kernel dist/kernel.elf -nographic \
+  -serial mon:stdio -no-reboot -semihosting -net nic,model=smc91c111 -net user
+
+# RISC-V (virt)
+qemu-system-riscv64 -machine virt -cpu max -bios none -kernel dist/kernel.elf \
+  -nographic -serial mon:stdio -no-reboot
+```
+
+In the shell: `help` for commands; `vm linux` (or `vm`) enters the Linux
+subsystem — an interactive busybox `ash` (`echo hello`, `exit`).
 
 ## Requirements (build)
 
-A Linux (WSL) environment with the 32-bit GCC multilib toolchain (x86)
-and/or the ARM cross toolchain (ARM):
+A Linux (WSL) environment with:
 
 ```sh
-# x86 build (kernel + ISO)
-sudo apt install build-essential gcc-multilib binutils python3 \
-                 grub-pc-bin xorriso mtools
-# ARM build (kernel + ISO)
-sudo apt install gcc-arm-none-eabi genisoimage
-# Testing in QEMU (optional but recommended)
-sudo apt install qemu-system-x86 qemu-system-arm seabios
+sudo apt install build-essential gcc-multilib binutils python3 grub-pc-bin \
+                 xorriso mtools gcc-arm-none-eabi genisoimage \
+                 gcc-riscv64-linux-gnu qemu-system-x86 qemu-system-arm \
+                 qemu-system-riscv64 seabios
 ```
 
-Tested with: GCC 15.2 (x86), GCC 14.2 arm-none-eabi, GRUB 2.14,
-QEMU 10.2, genisoimage, Python 3.
-
-## Build
-
-The repository is split into two independent builds, one per architecture:
-
-```sh
-cd x86 && make          # x86/dist/kernel.elf
-cd x86 && make iso      # x86/dist/kresten-x86.iso + kresten-x86-install.iso
-
-cd arm && make          # arm/dist/kernel.elf (Versatile PB)
-```
-
-### x86
-
-- `dist/kresten-x86.iso` — regular bootable ISO (GRUB)
-- `dist/kresten-x86-install.iso` — installer ISO: boots, installs to the
-  first hard disk (MBR + image), reboots into the installed system
-
-## Run
-
-Quick test in QEMU:
-
-```sh
-cd x86 && make run
-```
-
-Or boot the ISO:
-
-```sh
-qemu-system-i386 -m 128M -cdrom dist/kresten-x86.iso -boot d -vga vmware
-```
-
-Install to a virtual hard disk and boot from it (two phases, one command):
-
-```sh
-qemu-system-i386 -m 128M -hda install.img -cdrom dist/kresten-x86-install.iso \
-  -boot once=d,order=c -vga vmware
-```
-
-After the kernel prints `[INFO] INSTALL DONE` it reboots; the VM then
-boots from the hard disk into the desktop. Tested on QEMU and VMware.
-
-ARM (Versatile PB, semihosted console):
-
-```sh
-cd arm && make run
-```
+Tested with: GCC 15.2 (x86), GCC 15.2 riscv64-linux-gnu, arm-none-eabi,
+GRUB 2.14, QEMU 10.2, genisoimage, Python 3.
 
 ## Repository layout
 
 ```
-x86/       x86 build: Makefile, arch/ (multiboot boot.s, GDT/IDT,
-           interrupts, MBR boot sector), kernel/, drivers/ (SVGA/VBE),
-           libc/, include/, plugins/, shared/ (desktop GUI), scripts/
-           (ISO build + install packer), tests/ (QEMU regression scripts)
-arm/       ARM build: Makefile (arm-none-eabi), boot/start.s, kernel/
-           (Versatile PB: lcd/timer/net + installer), include/, shared/
-           (desktop GUI), scripts/ (gen_crt_table.py, make_iso.sh)
+Kresten/
+  README.md          this file
+  CHANGELOG.md       release history (v2.0: RISC-V, LX subsystem, ...)
+  x86/               x86-64 build (multiboot boot, GDT/IDT, MBR, installer,
+                     drivers incl. ATA/iso9660/rtl8139, net stack, registry,
+                     VT-x vm plugin, LX subsystem, tests/)
+  arm/               ARM build (Versatile PB: lcd/timer/net + LX subsystem)
+  riscv/             RISC-V build (virt: lcd/timer + U-mode guest, LX subsystem)
+build_iso.ps1        x86 build script (kernel + both ISOs -> Desktop)
+build_arm.ps1        ARM build script (kernel + ISO -> Desktop)
+build_rv64.ps1       RISC-V build script (kernel + ISO -> Desktop)
 ```
 
 The desktop GUI (`shared/plugins/desktop.c`), the PS/2 packet decoder and
-the minimal libc are shared between both architectures.
+the minimal libc are shared between the ARM and RISC-V builds; x86 keeps its
+own richer driver set.
 
 ## License
 

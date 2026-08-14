@@ -10,4 +10,10 @@ typedef signed short       int16_t;
 typedef signed int         int32_t;
 typedef signed long long   int64_t;
 
+#ifdef __x86_64__
+typedef unsigned long long uintptr_t;
+#else
+typedef unsigned int uintptr_t;
+#endif
+
 #endif

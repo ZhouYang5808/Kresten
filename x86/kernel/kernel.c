@@ -48,13 +48,14 @@ void kernel_main(uint32_t mb_info) {
     serial_init();
     gdt_init();
 
-    puts("[INFO] KERNEL: Kresten Kernel v1.0 x86 starting...\n");
+    puts("[INFO] KERNEL: Kresten Kernel v2.0 x86 starting...\n");
 
     idt_init();
     drivers_register_all();
     driver_init_all();
 
     net_init();
+    net_dhcp();
 
     heap_init(0, 0);
     rtc_init();
@@ -68,7 +69,7 @@ void kernel_main(uint32_t mb_info) {
         sys_reboot();
     }
     proc_init();
-    proc_create("test", (uint32_t)test_process);
+    proc_create("test", test_process);
     net_thread_start();
     {
         int rc = net_ping("10.0.2.2", 3);

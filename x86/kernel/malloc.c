@@ -2,7 +2,7 @@
 #include <string.h>
 
 #define HEAP_SIZE (64 * 1024)
-#define ALIGN 4
+#define ALIGN 8
 #define MAGIC_FREE 0x1234
 #define MAGIC_USED 0x5678
 

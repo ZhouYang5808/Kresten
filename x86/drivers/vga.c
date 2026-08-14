@@ -30,7 +30,117 @@ static void vga_scroll(void) {
         VGA_MEM[(VGA_ROWS - 1) * VGA_COLS + col] = blank;
 }
 
+/* minimal ANSI (ESC [ ...) state machine: keep ash line-editor redraws
+ * (ESC[J / ESC[K / ESC[nD / ESC[nC ...) from rendering garbage glyphs */
+static int ansi_state = 0;
+static int ansi_param[4];
+static int ansi_nparam = 0;
+static int ansi_pending = 0;
+
+static void vga_clear_to_end(void) {
+    int row = vga_row, col = vga_col;
+    while (row < VGA_ROWS) {
+        int start = (row == vga_row) ? col : 0;
+        for (int c = start; c < VGA_COLS; c++)
+            vga_put_char(c, row, ' ', vga_color);
+        row++;
+    }
+}
+
+static void vga_clear_line_tail(void) {
+    for (int c = vga_col; c < VGA_COLS; c++)
+        vga_put_char(c, vga_row, ' ', vga_color);
+}
+
+static void vga_ansi_exec(char terminator) {
+    int p1 = ansi_nparam > 0 ? ansi_param[0] : 0;
+    int p2 = ansi_nparam > 1 ? ansi_param[1] : 0;
+    switch (terminator) {
+    case 'J':
+        if (p1 == 2) {
+            vga_clear();
+            vga_row = 0;
+            vga_col = 0;
+        } else {
+            vga_clear_to_end();
+        }
+        break;
+    case 'K':
+        if (p1 == 2)
+            vga_clear_line_tail(); /* approximate: clear whole line */
+        else
+            vga_clear_line_tail();
+        break;
+    case 'H':
+    case 'f':
+        if (p1 > 0 && p1 <= VGA_ROWS) vga_row = p1 - 1;
+        if (p2 > 0 && p2 <= VGA_COLS) vga_col = p2 - 1;
+        break;
+    case 'G':
+        if (p1 > 0 && p1 <= VGA_COLS) vga_col = p1 - 1;
+        break;
+    case 'A':
+        vga_row -= p1 ? p1 : 1;
+        if (vga_row < 0) vga_row = 0;
+        break;
+    case 'B':
+        vga_row += p1 ? p1 : 1;
+        if (vga_row >= VGA_ROWS) vga_row = VGA_ROWS - 1;
+        break;
+    case 'C':
+        vga_col += p1 ? p1 : 1;
+        if (vga_col >= VGA_COLS) vga_col = VGA_COLS - 1;
+        break;
+    case 'D':
+        vga_col -= p1 ? p1 : 1;
+        if (vga_col < 0) vga_col = 0;
+        break;
+    default:
+        break; /* m / h / l / r / s / u ...: ignore */
+    }
+    vga_set_cursor(vga_row, vga_col);
+}
+
 void vga_putc(char c) {
+    if (ansi_state == 0) {
+        if (c == 0x1B) {
+            ansi_state = 1;
+            return;
+        }
+    } else if (ansi_state == 1) {
+        if (c == '[') {
+            ansi_state = 2;
+            ansi_nparam = 0;
+            ansi_pending = 0;
+            for (int i = 0; i < 4; i++) ansi_param[i] = 0;
+        } else if (c == 0x1B) {
+            /* keep waiting */
+        } else {
+            ansi_state = 0;
+        }
+        return;
+    } else {
+        if (c >= '0' && c <= '9') {
+            if (ansi_nparam < 4)
+                ansi_param[ansi_nparam] = ansi_param[ansi_nparam] * 10 + (c - '0');
+            return;
+        }
+        if (c == ';') {
+            if (ansi_nparam < 4) ansi_nparam++;
+            return;
+        }
+        if (c == '?') {
+            ansi_pending = 1;
+            return;
+        }
+        if (c >= '@' && c <= '~') {
+            vga_ansi_exec(c);
+            ansi_state = 0;
+        } else {
+            ansi_state = 0;
+        }
+        return;
+    }
     if (c == '\n') {
         vga_col = 0;
         vga_row++;
