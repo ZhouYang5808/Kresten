@@ -11,6 +11,10 @@ DISPLAY_X86 = ["vga_init", "vga_test"]
 NET_ARM = ["net_init", "net_poll", "net_ifconfig",
            "net_ping", "net_nslookup", "net_fetch", "net_dhcp"]
 NET_X86 = []
+RTC_ARM = ["rtc_init", "rtc_read"]
+RTC_X86 = []
+KBD_ARM = ["kbd_init", "kbd_test"]
+KBD_X86 = []
 
 IS_X86 = len(sys.argv) >= 2 and sys.argv[1] == "x86"
 
@@ -41,8 +45,6 @@ FUNCTIONS = [
     # environment
     "env_init", "env_get", "env_set", "env_unset",
     "env_list", "env_expand",
-    # rtc
-    "rtc_init", "rtc_read",
     # editor
     "editor_run",
     # process
@@ -56,9 +58,9 @@ FUNCTIONS = [
     "sys_poweroff",
     # drivers
     "driver_init_all", "driver_list_all",
-] + (DISPLAY_ARM if not IS_X86 else DISPLAY_X86) + [
-    "kbd_init", "kbd_test",
-]
+] + (DISPLAY_ARM if not IS_X86 else DISPLAY_X86) + \
+    (RTC_ARM if not IS_X86 else RTC_X86) + \
+    (KBD_ARM if not IS_X86 else KBD_X86)
 
 def main():
     out = sys.stdout

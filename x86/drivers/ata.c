@@ -1,3 +1,6 @@
+#ifndef ATA_DEBUG
+#define ATA_DEBUG 0
+#endif
 #include <ata.h>
 #include <io.h>
 #include <stdio.h>
@@ -7,13 +10,27 @@ static int ata_type[4];
 static uint16_t ata_io[4];
 static char ata_model[4][41];
 
+extern uint32_t sched_get_ticks(void);
+
+static inline uint64_t ata_rdtsc(void) {
+    uint32_t lo, hi;
+    __asm__ volatile ("rdtsc" : "=a"(lo), "=d"(hi));
+    return ((uint64_t)hi << 32) | lo;
+}
+
 static int ata_wait(uint16_t io, int timeout) {
+    int slow = 1;
     for (int i = 0; i < timeout; i++) {
         uint8_t st = inb(io + ATA_REG_STATUS);
         if (!(st & ATA_SR_BSY)) {
             if (st & ATA_SR_ERR) return -1;
             if (st & ATA_SR_DRQ) return 1;
             if (i > 100) return 1;
+        }
+        if (slow && i == 20000) {
+            if (ATA_DEBUG) printf("[ATA] wait slow i=%d st=%02x ticks=%u\n", i, inb(io + ATA_REG_STATUS),
+                   sched_get_ticks());
+            slow = 0;
         }
     }
     return -1;
@@ -181,7 +198,7 @@ static int atapi_packet(uint8_t drive, uint8_t cdb[12], uint16_t max_len, void *
             if (st & ATA_SR_ERR) break;
         }
         if (!got_drq) {
-            printf("[ATA] packet cdb handshake fail st=%02x err=%02x\n",
+            if (ATA_DEBUG) printf("[ATA] packet cdb handshake fail st=%02x err=%02x\n",
                    inb(io + ATA_REG_STATUS), inb(io + ATA_REG_ERROR));
             return -1;
         }
@@ -193,11 +210,18 @@ static int atapi_packet(uint8_t drive, uint8_t cdb[12], uint16_t max_len, void *
         p += 2;
     }
     uint8_t *dst = (uint8_t *)buf;
+    unsigned t0 = sched_get_ticks();
+    unsigned polls = 0;
     while (max_len > 0) {
-        int r = ata_wait(io, 100000);
+        int r = ata_wait(io, 2000);
+        polls += 2000;
+        if (r < 0) {
+            r = ata_wait(io, 1000000);  /* 兜底: 慢速介质再等 (QEMU DRQ 可达 ~10^5+ 轮询) */
+            polls += 1000000;
+        }
         if (r < 0) {
             uint32_t lba = (cdb[2] << 24) | (cdb[3] << 16) | (cdb[4] << 8) | cdb[5];
-            printf("[ATA] packet data fail st=%02x err=%02x cdb0=%02x lba=%u rem=%u\n",
+            if (ATA_DEBUG) printf("[ATA] packet data fail st=%02x err=%02x cdb0=%02x lba=%u rem=%u\n",
                    inb(io + ATA_REG_STATUS), inb(io + ATA_REG_ERROR), cdb[0], lba, max_len);
             return -1;
         }
@@ -206,8 +230,11 @@ static int atapi_packet(uint8_t drive, uint8_t cdb[12], uint16_t max_len, void *
             *(uint16_t *)(dst + i) = inw(io + ATA_REG_DATA);
         dst += n;
         max_len -= n;
+        if (ATA_DEBUG) printf("[ATA] sec rem=%u st=%02x t=%u\n", max_len, inb(io + ATA_REG_STATUS),
+               sched_get_ticks() - t0);
     }
     ata_poll(io);
+    if (ATA_DEBUG) printf("[ATA] packet done polls=%u ticks=%u\n", polls, sched_get_ticks() - t0);
     return 0;
 }
 
@@ -227,5 +254,5 @@ int atapi_read(uint8_t drive, uint32_t lba, uint32_t sectors, void *buf) {
 void atapi_debug_cdb(uint8_t drive, const uint8_t *cdb, uint16_t max_len) {
     static uint8_t tmp[2048];
     int r = atapi_packet(drive, (uint8_t *)cdb, max_len, tmp);
-    printf("[ATA] dbg drive=%d r=%d cdb0=%02x\n", drive, r, cdb[0]);
+    if (ATA_DEBUG) printf("[ATA] dbg drive=%d r=%d cdb0=%02x\n", drive, r, cdb[0]);
 }

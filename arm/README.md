@@ -1,11 +1,11 @@
-# Kresten ARM (v2.0)
+# Kresten ARM (v3.1)
 
-ARM (Versatile PB) 移植版:与 RISC-V 版共享桌面 GUI 与 Linux 子系统,带完整网络协议栈 (SMC91C111)。
+ARM (Versatile PB) 原生版本:与 RISC-V 版共享桌面 GUI 与 Linux 子系统,带完整网络协议栈 (SMC91C111)。
 
 ## 功能
 
 - **内核**:ARM32 (`arm-none-eabi`,armv5te),semihosted 控制台,抢占式调度器 (CLINT 100 Hz)
-- **桌面**:与 x86 相同的标签式 GUI (App Manager / Shell / FMGR / My Computer / Recycle Bin)
+- **桌面**:标签式 GUI (App Manager / Shell / FMGR / My Computer / Recycle Bin)
 - **驱动**:PL110 LCD 帧缓冲 (lcd)、PL050 键盘 (kbd)、PS/2 鼠标、RTC、timer
 - **网络**:SMC91C111 + 完整 TCP/IP 协议栈 (DHCP/ARP/ICMP/PING/DNS/HTTP-FETCH)
 - **VM 插件**:软件模拟模式 (`vm_soft.c`,ARM 无硬件虚拟化);`vm` / `vm linux` / `vm list`

@@ -1,0 +1,3 @@
+#!/bin/bash
+# Kresten cross-compiler wrapper
+exec x86_64-linux-gnu-gcc -m64 -nostdlib -ffreestanding -fno-pie -mno-red-zone -Wall -Werror -DX86_ARCH -I/tmp/kresten-sdk/sysroot/include -L/tmp/kresten-sdk/sysroot/lib "$@"

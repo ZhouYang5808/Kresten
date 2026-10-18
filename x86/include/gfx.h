@@ -20,6 +20,10 @@ int gfx_enter(void);
 void gfx_leave(void);
 int gfx_active(void);
 const uint8_t *gfx_get_font(void);
+const uint8_t *gfx_get_font_aa(void);
+/* 1-bit Terminus 位图(font.kdrv; gfx_save_font 用) */
+const uint8_t *gfx_font_bmp(void);
+const uint8_t *gfx_get_palette_rgb(void);
 void gfx_clear(uint8_t color);
 void gfx_blit(const uint8_t *fb);
 void gfx_pixel(int x, int y, uint8_t color);

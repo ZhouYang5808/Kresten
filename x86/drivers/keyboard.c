@@ -127,9 +127,9 @@ void keyboard_flush(void) {
         }
         __asm__ volatile("sti");
         uint32_t now = sched_ticks;
-        if ((uint32_t)(now - t0) >= 50)             /* 硬上限 500 ms */
+        if ((uint32_t)(now - t0) >= 400)            /* 硬上限 4000 ms: 键流式到达时继续排空 */
             break;
-        if (had || now != last_activity)
+        if (had)
             last_activity = now;
         else if (last_activity == t0 && now == t0) {
             /* PIT 无动静(极早期/异常): 用端口访问让出事件循环, 尽力而为 */
@@ -140,10 +140,24 @@ void keyboard_flush(void) {
                 break;
             continue;
         }
-        if ((uint32_t)(now - last_activity) >= 5)   /* 静默 50 ms 视为排空 */
+        if ((uint32_t)(now - last_activity) >= 20)  /* 静默 200 ms 视为排空 */
             break;
         while (sched_ticks == now) {}
     }
+}
+
+/* 只丢弃此刻已缓冲/已送达 8042 的键，不等待。
+ * 用于"程序运行前清键"：等待式排空会把运行后才到达的键(流式注入)
+ * 一起吞掉，饿死用户程序；此处只需清掉加载期间收集的残留。 */
+void keyboard_discard_pending(void) {
+    __asm__ volatile("cli");
+    key_head = 0;
+    key_tail = 0;
+    sc_head = 0;
+    sc_tail = 0;
+    while (inb(KEYBOARD_STATUS) & 0x01)
+        inb(KEYBOARD_DATA);
+    __asm__ volatile("sti");
 }
 
 int keyboard_poll_scancode(void) {

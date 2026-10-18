@@ -1,16 +1,39 @@
 #!/bin/bash
 # Build dist/kresten-riscv.iso - Kresten release ISO (kernel + docs + run scripts).
 # Note: the riscv virt machine boots via -kernel; the ISO is the distribution
-# medium (same convention as the ARM build).
+# medium (kernel.elf embeds plugins/drivers/fonts, the ISO copies are for reference).
 set -e
 cd "$(dirname "$0")/.."
 
-VERSION="2.0"
+VERSION="3.1"
 STAGE="build/iso"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE/boot"
 cp dist/kernel.elf "$STAGE/boot/kernel.elf"
+
+if [ -d dist/plugins ]; then
+    mkdir -p "$STAGE/plugins/kernel" "$STAGE/plugins/runtime" "$STAGE/plugins/user"
+    for p in crt_bind vm; do
+        if [ -f "dist/plugins/$p.kplg" ]; then cp "dist/plugins/$p.kplg" "$STAGE/plugins/kernel/"; fi
+    done
+    for p in linux; do
+        if [ -f "dist/plugins/$p.kplg" ]; then cp "dist/plugins/$p.kplg" "$STAGE/plugins/runtime/"; fi
+    done
+    for p in shell desktop hello; do
+        if [ -f "dist/plugins/$p.kplg" ]; then cp "dist/plugins/$p.kplg" "$STAGE/plugins/user/"; fi
+    done
+fi
+
+if [ -d dist/drivers ]; then
+    mkdir -p "$STAGE/drivers"
+    cp dist/drivers/*.kdrv "$STAGE/drivers/"
+fi
+
+if [ -d dist/fonts ]; then
+    mkdir -p "$STAGE/fonts"
+    cp dist/fonts/*.kdrv "$STAGE/fonts/"
+fi
 
 cat > "$STAGE/README.TXT" <<EOF
 Kresten v$VERSION - RISC-V (QEMU virt)

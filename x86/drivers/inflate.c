@@ -2,7 +2,9 @@
  * 支持 stored / fixed / dynamic Huffman 块;无 CRC 校验。 */
 
 #include <inflate.h>
+#include <stdio.h>
 #include <string.h>
+#include <driver.h>
 
 #define MAX_BITS 15
 
@@ -38,7 +40,10 @@ static int rd_bits(int n) {
 
 static int build_table(htable *h, const uint16_t *lens, int nsym) {
     memset(h, 0, sizeof(*h));
-    for (int i = 0; i < nsym; i++) h->cnt[lens[i]]++;
+    for (int i = 0; i < nsym; i++) {
+        if (lens[i] > MAX_BITS) return -1;   /* 防御: 非法码长(如 EOF 的 0xFFFF)不得索引 cnt[] */
+        h->cnt[lens[i]]++;
+    }
     h->cnt[0] = 0;
     int left = 1;
     for (int len = 1; len <= MAX_BITS; len++) {
@@ -96,6 +101,8 @@ static const uint16_t clen_order[19] = {
 static int emit(uint8_t b) {
     if (outlen >= outcap) return -1;
     out[outlen++] = b;
+    if ((outlen & 0x03FFFFFF) == 0)
+        printf("[WINEFS] inflate: %u MB\n", outlen >> 20);
     return 0;
 }
 
@@ -141,14 +148,18 @@ static int inflate_block(void) {
         for (int i = 0; i < 30; i++) dlen[i] = 5;
         if (build_table(&dst, dlen, 30) < 0) return -1;
     } else if (type == 2) {
-        int hlit = rd_bits(5) + 257;
-        int hdist = rd_bits(5) + 1;
-        int hclen = rd_bits(4) + 4;
-        if (hlit < 0 || hdist < 0 || hclen < 0) return -1;
+        int rhlit = rd_bits(5), rhdist = rd_bits(5), rhclen = rd_bits(4);
+        if (rhlit < 0 || rhdist < 0 || rhclen < 0) return -1;   /* EOF: 不能把 -1 当有效值 */
+        int hlit = rhlit + 257;
+        int hdist = rhdist + 1;
+        int hclen = rhclen + 4;
         uint16_t clens[19];
         memset(clens, 0, sizeof(clens));
-        for (int i = 0; i < hclen; i++)
-            clens[clen_order[i]] = (uint16_t)rd_bits(3);
+        for (int i = 0; i < hclen; i++) {
+            int v = rd_bits(3);
+            if (v < 0) return -1;       /* 否则 (uint16_t)-1 = 0xFFFF 越界写 cnt[] */
+            clens[clen_order[i]] = (uint16_t)v;
+        }
         htable clen;
         if (build_table(&clen, clens, 19) < 0) return -1;
 
@@ -164,12 +175,15 @@ static int inflate_block(void) {
             } else if (sym == 16) {
                 if (idx == 0) return -1;
                 int e = rd_bits(2);
+                if (e < 0) return -1;
                 for (int i = 0; i < e + 3 && idx < n; i++) lens[idx++] = (uint16_t)prev;
             } else if (sym == 17) {
                 int e = rd_bits(3);
+                if (e < 0) return -1;
                 for (int i = 0; i < e + 3 && idx < n; i++) lens[idx++] = 0;
             } else {
                 int e = rd_bits(7);
+                if (e < 0) return -1;
                 for (int i = 0; i < e + 11 && idx < n; i++) lens[idx++] = 0;
             }
         }
@@ -239,3 +253,6 @@ int gunzip(const uint8_t *src, uint32_t srclen, uint8_t *dst, uint32_t dstcap) {
 
     return (int)outlen;
 }
+
+/* .kdrv 驱动模块: 纯函数库(rootfs.kdrv 依赖 gunzip), 无 init */
+REGISTER_DRIVER("inflate", DRV_TYPE_FS, 0);

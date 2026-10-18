@@ -56,7 +56,10 @@ static int save_file(void) {
     }
     buf[pos] = '\0';
     char resolved[64];
-    if (!fs_resolve_path(filename, resolved, sizeof(resolved))) return -1;
+    if (!fs_resolve_path(filename, resolved, sizeof(resolved))) {
+        free(buf);                          /* 早退路径不能泄漏拼接缓冲 */
+        return -1;
+    }
     int ret;
     if (fs_find_entry(resolved)) ret = fs_update_file(resolved, buf);
     else ret = fs_create_file(resolved, buf);

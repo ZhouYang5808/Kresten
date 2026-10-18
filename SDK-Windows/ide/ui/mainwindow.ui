@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Kresten IDE</string>
+  </property>
+  <widget class="QWidget" name="centralWidget">
+   <layout class="QHBoxLayout" name="horizontalLayout">
+    <item>
+     <widget class="QSplitter" name="mainSplitter">
+      <property name="orientation">
+       <enum>Qt::Horizontal</enum>
+      </property>
+      <widget class="QWidget" name="leftWidget">
+       <layout class="QVBoxLayout" name="verticalLayout">
+        <item>
+         <widget class="ProjectTree" name="projectTree"/>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QSplitter" name="editorSplitter">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+       <widget class="QWidget" name="editorWidget">
+        <layout class="QVBoxLayout" name="verticalLayout_2">
+         <item>
+          <widget class="QTabWidget" name="editorTabs">
+           <property name="tabsClosable">
+            <bool>true</bool>
+           </property>
+           <property name="movable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+       <widget class="BuildOutput" name="buildOutput"/>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menuBar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1200</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>&File</string>
+    </property>
+    <addaction name="newProjectAction"/>
+    <addaction name="openProjectAction"/>
+    <addaction name="separator"/>
+    <addaction name="saveAction"/>
+    <addaction name="saveAllAction"/>
+    <addaction name="separator"/>
+    <addaction name="exitAction"/>
+   </widget>
+   <widget class="QMenu" name="menuBuild">
+    <property name="title">
+     <string>&Build</string>
+    </property>
+    <addaction name="buildAction"/>
+    <addaction name="cleanAction"/>
+    <addaction name="runAction"/>
+   </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="title">
+     <string>&Tools</string>
+    </property>
+    <addaction name="settingsAction"/>
+   </widget>
+   <widget class="QMenu" name="menuHelp">
+    <property name="title">
+     <string>&Help</string>
+    </property>
+    <addaction name="aboutAction"/>
+   </widget>
+  </widget>
+  <widget class="QToolBar" name="fileToolBar">
+   <property name="windowTitle">
+    <string>File</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="newProjectAction"/>
+   <addaction name="openProjectAction"/>
+   <addaction name="saveAction"/>
+   <addaction name="saveAllAction"/>
+  </widget>
+  <widget class="QToolBar" name="buildToolBar">
+   <property name="windowTitle">
+    <string>Build</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="buildAction"/>
+   <addaction name="cleanAction"/>
+   <addaction name="runAction"/>
+  </widget>
+  <widget class="QToolBar" name="debugToolBar">
+   <property name="windowTitle">
+    <string>Debug</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+  </widget>
+  <widget class="QStatusBar" name="statusBar"/>
+  <action name="newProjectAction">
+   <property name="text">
+    <string>&New Project...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+N</string>
+   </property>
+   <property name="iconText">
+    <string>New</string>
+   </property>
+  </action>
+  <action name="openProjectAction">
+   <property name="text">
+    <string>&Open Project...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+   <property name="iconText">
+    <string>Open</string>
+   </property>
+  </action>
+  <action name="saveAction">
+   <property name="text">
+    <string>&Save</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+S</string>
+   </property>
+   <property name="iconText">
+    <string>Save</string>
+   </property>
+  </action>
+  <action name="saveAllAction">
+   <property name="text">
+    <string>Save &All</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+S</string>
+   </property>
+   <property name="iconText">
+    <string>Save All</string>
+   </property>
+  </action>
+  <action name="exitAction">
+   <property name="text">
+    <string>E&xit</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Q</string>
+   </property>
+  </action>
+  <action name="buildAction">
+   <property name="text">
+    <string>&Build</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+B</string>
+   </property>
+   <property name="iconText">
+    <string>Build</string>
+   </property>
+  </action>
+  <action name="cleanAction">
+   <property name="text">
+    <string>&Clean</string>
+   </property>
+   <property name="iconText">
+    <string>Clean</string>
+   </property>
+  </action>
+  <action name="runAction">
+   <property name="text">
+    <string>&Run</string>
+   </property>
+   <property name="shortcut">
+    <string>F5</string>
+   </property>
+   <property name="iconText">
+    <string>Run</string>
+   </property>
+  </action>
+  <action name="settingsAction">
+   <property name="text">
+    <string>&Settings...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+,</string>
+   </property>
+   <property name="iconText">
+    <string>Settings</string>
+   </property>
+  </action>
+  <action name="aboutAction">
+   <property name="text">
+    <string>&About</string>
+   </property>
+  </action>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>ProjectTree</class>
+   <extends>QTreeView</extends>
+   <header>projecttree.h</header>
+  </customwidget>
+  <customwidget>
+   <class>BuildOutput</class>
+   <extends>QPlainTextEdit</extends>
+   <header>buildoutput.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources>
+  <include location="resources/icons.qrc"/>
+ </resources>
+ <connections/>
+</ui>

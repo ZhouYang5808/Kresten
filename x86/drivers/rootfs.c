@@ -7,6 +7,7 @@
 #include <ata.h>
 #include <stdio.h>
 #include <string.h>
+#include <driver.h>
 
 #define RF_CPIO_MAX   (12u * 1024 * 1024)   /* 解压缓冲(亦是数据区) */
 #define RF_NODE_MAX   4096
@@ -285,3 +286,6 @@ int rootfs_import(void) {
     printf("[ROOTFS] imported: '%s', %u nodes, %u files\n", distro, rf_nnodes, files);
     return 1;
 }
+
+/* .kdrv 驱动模块(依赖 inflate.kdrv 的 gunzip; 被 linux.kplg 引用 rootfs_import) */
+REGISTER_DRIVER("rootfs", DRV_TYPE_FS, 0);

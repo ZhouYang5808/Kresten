@@ -35,5 +35,7 @@ void proc_yield(void);
 void proc_exit(int code);
 void proc_list(void);
 Process *proc_current(void);
+int proc_get_count(void);
+Process *proc_get_all(void);
 
 #endif

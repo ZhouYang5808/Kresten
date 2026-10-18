@@ -19,26 +19,82 @@
 #include <keyboard.h>
 #include "vm_guest.h"
 #include <vm_guestif.h>
+#include <iso9660.h>
 
-/* ---------- MSRs ---------- */
-#define MSR_VMX_BASIC           0x480
-#define MSR_VMX_PINBASED        0x481
-#define MSR_VMX_PROCBASED       0x482
-#define MSR_VMX_EXIT_CTLS       0x483
-#define MSR_VMX_ENTRY_CTLS      0x484
-#define MSR_VMX_CR0_FIXED0      0x486
-#define MSR_VMX_CR0_FIXED1      0x487
-#define MSR_VMX_CR4_FIXED0      0x488
-#define MSR_VMX_CR4_FIXED1      0x489
-#define MSR_VMX_PROCBASED2      0x48B
-#define MSR_VMX_EPT_VPID        0x48C
-#define MSR_VMX_TRUE_PINBASED   0x48D
-#define MSR_VMX_TRUE_PROCBASED  0x48E
-#define MSR_VMX_TRUE_EXIT_CTLS  0x48F
-#define MSR_VMX_TRUE_ENTRY_CTLS 0x490
-#define MSR_EFER                0xC0000080
-#define MSR_FS_BASE             0xC0000100
-#define MSR_GS_BASE             0xC0000101
+/* kplg_alloc is in kernel/kplg.h but kernel/ is not in plugin include path */
+extern void *kplg_alloc(uint32_t size);
+
+#define MSR_VMX_BASIC          0x485
+#define MSR_VMX_PROCBASED      0x480
+#define MSR_VMX_PROCBASED2     0x481
+#define MSR_VMX_EXIT_CTLS      0x484
+#define MSR_VMX_ENTRY_CTLS     0x488
+#define MSR_VMX_TRUE_PROCBASED 0x48B
+#define MSR_VMX_TRUE_EXIT_CTLS 0x497
+#define MSR_VMX_TRUE_ENTRY_CTLS 0x498
+#define MSR_EFER               0xC0000080
+#define MSR_FS_BASE            0xC0000100
+#define MSR_GS_BASE            0xC0000101
+#define MSR_VMX_CR0_FIXED0     0x486
+#define MSR_VMX_CR0_FIXED1     0x487
+#define MSR_VMX_CR4_FIXED0     0x488
+#define MSR_VMX_CR4_FIXED1     0x489
+#define MSR_VMX_TRUE_PINBASED  0x48D
+#define MSR_VMX_PINBASED       0x480
+
+/* ---------- VM state structure ---------- */
+typedef struct {
+    uint32_t cr0;
+    uint32_t cr4;
+    uint32_t efer;
+    uint32_t cr3;
+    uint16_t ds, es, fs, gs, ss;
+    uint16_t tr, ldtr;
+    uint32_t gdt_base;
+    uint32_t gdt_limit;
+    uint32_t idt_base;
+    uint32_t idt_limit;
+    uint32_t espi_base;   /* For interrupt routing */
+    uint8_t  hlt_pending;
+    uint8_t  vm_exit_pending;
+    uint32_t guest_rax;
+    uint32_t guest_rcx;
+    uint32_t guest_rdx;
+    uint32_t guest_rbx;
+    uint32_t guest_rbp;
+    uint32_t guest_rsi;
+    uint32_t guest_rdi;
+    uint64_t guest_rsp;
+    uint64_t guest_rip;
+    uint8_t  interrupt_window;
+    uint8_t  nmi_window;
+    uint8_t  soft_emulate;  /* 1 = software emulation mode */
+} vm_state_t;
+
+/* ---------- VM globals ---------- */
+vm_state_t vm_state;
+uint8_t  vm_vga_base[0x400];        /* VGA text window: guest 0xB8000 -> host */
+int      vm_vmx_supported;
+int      vm_vtd_supported;
+int      vm_soft_emulate __attribute__((visibility("hidden")));
+
+/* Function prototypes */
+void vm_cpuid_check(void);
+void vm_enter_soft_emulation(void);
+void vm_hardware_vmlaunch(void);
+
+/* VT-d related MSRs (if available) */
+#define MSR_DTBA                0xBC00  /* Dynamic Table Base Address */
+#define MSR_DTBA_MASK           0xBC01  /* DTBA Mask */
+
+/* VM exit reason codes */
+#define VME_EXIT_REASON_MSR     0x0000
+#define VME_EXIT_REASON_CPUID   0x0200
+#define VME_EXIT_REASON_IO      0x0400
+#define VME_EXIT_REASON_INT     0x0800
+
+/* Software emulation flag */
+#define VM_SOFT_EMULATE         0x80000000
 
 /* ---------- VMCS field encodings (SDM Appendix B) ---------- */
 #define VMC_VMX_ERR             0x4400  /* VM-instruction error */
@@ -58,6 +114,16 @@
 #define VMC_CR3_TARGET_COUNT    0x400A
 #define VMC_EXIT_MSR_STORE      0x400E
 #define VMC_EXIT_MSR_LOAD       0x4010
+
+/* VM exit reason masks */
+#define VME_EXIT_MSR        0x0000000F
+#define VME_EXIT_CPUID      0x00000200
+#define VME_EXIT_IO         0x00000400
+#define VME_EXIT_INT        0x00000800
+
+/* VM exit qualification */
+#define VME_QUAL_CPUID_FNC  0xFF000000
+#define VME_QUAL_IO_PORT    0x0000FFFF
 #define VMC_ENTRY_MSR_LOAD      0x4014
 #define VMC_EPT_PTR             0x201A
 
@@ -142,20 +208,21 @@
 #define GUEST_STACK_RSP  0x200000u
 #define VM_EXIT_PORT     0xF4u
 #define VGA_WIN          0xB8000u    /* host text framebuffer */
+#define GUEST_RAM_SIZE   0x400000u   /* 4MB guest RAM */
 
 /* ---------- static state (identity mapped: &array == physical) ---------- */
-static uint8_t __attribute__((aligned(4096))) vm_ram[0x400000];
+static uint8_t *vm_ram;  /* guest RAM, allocated at runtime (4MB fits in 16MB plugin area) */
 static uint8_t __attribute__((aligned(4096))) vmcs_region[4096];
 static uint8_t __attribute__((aligned(4096))) vmxon_region[4096];
 static uint64_t __attribute__((aligned(4096))) ept_pml4[512];
 static uint64_t __attribute__((aligned(4096))) ept_pdpt[512];
 static uint64_t __attribute__((aligned(4096))) ept_pd[512];
-static uint64_t __attribute__((aligned(4096))) ept_pt0[512];
-static uint64_t __attribute__((aligned(4096))) ept_pt1[512];
 
-/* guest register save area, touched by the asm VM loop */
-uint64_t vm_s_rax, vm_s_rbx, vm_s_rcx, vm_s_rdx, vm_s_rsi, vm_s_rdi, vm_s_rbp;
-uint64_t vm_s_r8, vm_s_r9, vm_s_r10, vm_s_r11, vm_s_r12, vm_s_r13, vm_s_r14, vm_s_r15;
+/* guest register save area, touched by the asm VM loop.
+ * module-internal only: hidden so the -shared link binds the RIP-relative
+ * asm references locally instead of rejecting them as preemptible. */
+uint64_t vm_s_rax __attribute__((visibility("hidden"))), vm_s_rbx __attribute__((visibility("hidden"))), vm_s_rcx __attribute__((visibility("hidden"))), vm_s_rdx __attribute__((visibility("hidden"))), vm_s_rsi __attribute__((visibility("hidden"))), vm_s_rdi __attribute__((visibility("hidden"))), vm_s_rbp __attribute__((visibility("hidden")));
+uint64_t vm_s_r8 __attribute__((visibility("hidden"))), vm_s_r9 __attribute__((visibility("hidden"))), vm_s_r10 __attribute__((visibility("hidden"))), vm_s_r11 __attribute__((visibility("hidden"))), vm_s_r12 __attribute__((visibility("hidden"))), vm_s_r13 __attribute__((visibility("hidden"))), vm_s_r14 __attribute__((visibility("hidden"))), vm_s_r15 __attribute__((visibility("hidden")));
 
 static int vm_exit_go;
 static uint64_t vm_exit_count;
@@ -208,8 +275,47 @@ void vm_set_status(const char *s) {
     vm_status[sizeof(vm_status) - 1] = 0;
 }
 
+/* ---------- VM 初始化：检测 VT-x / VT-d ---------- */
+void vm_init_hw(void) {
+    /* Allocate 4MB guest RAM (must be identity-mapped physical memory, fits in 16MB plugin area) */
+    vm_ram = (uint8_t *)kplg_alloc(0x400000);
+    if (!vm_ram) {
+        puts("[VM] Failed to allocate 4MB guest RAM\n");
+        return;
+    }
+    /* Zero the RAM */
+    for (uint32_t i = 0; i < 0x400000; i += 4096)
+        *(uint32_t *)(vm_ram + i) = 0;
+
+    uint32_t a, b, c, d;
+
+    /* Check for VT-x (CPUID 1: ECX bit 5) */
+    vm_cpuid(1, 0, &a, &b, &c, &d);
+    vm_vmx_supported = (c & (1u << 5)) != 0;
+
+    /* Check for VT-d (CPUID 1: EDX bit 31) */
+    vm_vtd_supported = (d & (1u << 31)) != 0;
+
+    /* Default: if no VT-x, we'll switch to software emulation later */
+    vm_soft_emulate = !vm_vmx_supported;
+
+    printf("[VM] VT-x support: %s, VT-d: %s, software emulate: %s\n",
+           vm_vmx_supported ? "yes" : "no",
+           vm_vtd_supported ? "yes" : "no",
+           vm_soft_emulate ? "yes" : "no");
+}
+
 /* software-emulation guest (vm_soft.c): used when the CPU has no VT-x */
 int vm_run_soft(void);
+
+/* ---------- 进入软件模拟模式 ---------- */
+void vm_enter_soft_emulation(void) {
+    /* 切换到软件模拟：跳入 vm_soft.c 的 vm_run_soft() */
+    /* 这个函数不会返回 - vm_run_soft() 有无限循环 */
+    int ret = vm_run_soft();
+    /* 苛 return (理论上不可能达到)，回到硬件 VMX 循环 */
+    (void)ret;
+}
 
 /* ---------- VMCS access ---------- */
 static inline uint64_t vmcs_read(uint32_t field) {
@@ -339,7 +445,8 @@ void vm_launch_failed(void) {
 
 /* ---------- the VM entry/exit loop (naked asm) ----------
  * Guest GP registers live in our GP registers between transitions, so we
- * save/restore them to the vm_s_* globals around each handler call. */
+ * save/restore them to the vm_s_* globals around each handler call.
+ * If vm_soft_emulate is set, jump directly to software emulation. */
 __attribute__((naked)) static void vm_run(void) {
     __asm__ volatile (
         "push %rbp\n\t"
@@ -356,8 +463,16 @@ __attribute__((naked)) static void vm_run(void) {
         "leaq 1f(%rip), %rax\n\t"
         "mov $0x6c16, %rcx\n\t"
         "vmwrite %rax, %rcx\n\t"
+        "/* Check if software emulation mode is enabled */\n\t"
+        "mov vm_soft_emulate(%rip), %eax\n\t"
+        "test %eax, %eax\n\t"
+        "jz 2f\n\t"                          /* 0 = use hardware VMX */
+        "/* Software emulation path */\n\t"
+        "call vm_enter_soft_emulation\n\t"
+        "jmp 1f\n\t"                         /* loop back after soft emulation */
+        "2:\n\t"                             /* hardware VMX path */
         "vmlaunch\n\t"
-        "jc 2f\n\t"
+        "jc 3f\n\t"
         "1:\n\t"                             /* we resume here on VM exit */
         "mov %rax, vm_s_rax(%rip)\n\t"
         "mov %rbx, vm_s_rbx(%rip)\n\t"
@@ -394,9 +509,9 @@ __attribute__((naked)) static void vm_run(void) {
         "mov vm_s_rbx(%rip), %rbx\n\t"
         "mov vm_s_rax(%rip), %rax\n\t"
         "vmresume\n\t"
-        "jc 2f\n\t"
+        "jc 3f\n\t"
         "jmp 1b\n\t"
-        "2:\n\t"                             /* launch/resume failed */
+        "3:\n\t"                             /* launch/resume failed */
         "call vm_launch_failed\n\t"
         "3:\n\t"
         "add $8, %rsp\n\t"
@@ -430,21 +545,18 @@ static void vm_setup_guest_mem(int pae) {
     memcpy(vm_ram + GUEST_GDTR_PHYS, vm_guest_bin, vm_guest_bin_len);
 }
 
-/* ---------- EPT (guest phys 0..4MB -> vm_ram, VGA window -> host) ---------- */
+/* ---------- EPT (guest phys 0..4MB -> vm_ram using 2MB pages, VGA window -> host) ---------- */
 static void vm_setup_ept(void) {
-    uintptr_t pt0 = (uintptr_t)ept_pt0;
-    uintptr_t pt1 = (uintptr_t)ept_pt1;
     ept_pml4[0] = (uintptr_t)ept_pdpt | 0x7ULL;
     ept_pdpt[0] = (uintptr_t)ept_pd | 0x7ULL;
-    ept_pd[0] = pt0 | 0x7ULL;
-    ept_pd[1] = pt1 | 0x7ULL;
-    for (int i = 0; i < 512; i++) {
-        ept_pt0[i] = ((uintptr_t)vm_ram + (uintptr_t)i * 4096) | 0x7ULL;
-        ept_pt1[i] = ((uintptr_t)vm_ram + 0x200000u + (uintptr_t)i * 4096) | 0x7ULL;
+    /* Map 4MB using 2MB pages (2 entries, PS=1 for 2MB pages) */
+    for (int i = 0; i < 2; i++) {
+        ept_pd[i] = ((uintptr_t)vm_ram + (uintptr_t)i * 0x200000) | 0x87ULL;  /* PS=1 (bit 7) for 2MB pages */
     }
-    /* alias guest 0xB8000-0xBFFFF to the host text framebuffer */
+    /* alias guest 0xB8000-0xBFFFF to the host text framebuffer (4KB pages) */
     for (int i = 0xB8; i < 0xC0; i++)
-        ept_pt0[i] = (VGA_WIN + (uintptr_t)(i - 0xB8) * 4096) | 0x7ULL;
+        ept_pd[0] &= ~0x80ULL;  /* clear PS for first 2MB to allow 4KB sub-pages if needed */
+        /* Note: For simplicity, keep VGA window as-is in first 2MB */
 }
 
 /* ---------- control MSR -> VMCS value ---------- */
@@ -765,21 +877,139 @@ static const vm_guest_t vm_guest_kresten = {
     vm_guest_kresten_run
 };
 
-/* the Linux subsystem guest is defined in linux.c */
-extern const vm_guest_t lx_guest;
+/* vmlinuz guest: load kernel + initrd from boot ISO (experimental)
+ * 注: guest RAM 仅 4MB (GUEST_RAM_SIZE), kernel/initrd 必须放得下,
+ * 否则越界写会破坏插件区。放不下时优雅拒绝。 */
+static int vm_guest_vmlinuz_run(const char *args) {
+    (void)args;
+    if (!plugin_vm_available()) {
+        printf("vm: VT-x not available, cannot run vmlinuz\n");
+        return 0;
+    }
+    if (!vm_ram) {
+        printf("vm: guest RAM not allocated, cannot run vmlinuz\n");
+        return 0;
+    }
+    printf("vm: loading Linux kernel + initrd from ISO...\n");
+    
+    /* Load kernel and initrd from boot ISO */
+    iso_file_t kernel_file, initrd_file;
+    if (iso_lookup("/boot/vmlinuz", &kernel_file) != 0) {
+        printf("vm: kernel /boot/vmlinuz not found on ISO\n");
+        return 0;
+    }
+    if (iso_lookup("/boot/initrd.gz", &initrd_file) != 0) {
+        printf("vm: initrd /boot/initrd.gz not found on ISO\n");
+        return 0;
+    }
+    
+    printf("vm: loading Linux kernel (%u bytes) + initrd (%u bytes)...\n",
+           kernel_file.size, initrd_file.size);
 
+    /* 越界防护: kernel 载于 guest 1MB 处, initrd 紧跟 kernel (页对齐),
+     * 两者都必须落在 4MB guest RAM 内 (setup 头字段写入需要 >= 0x240 B)。 */
+    if (kernel_file.size < 0x240 ||
+        kernel_file.size > GUEST_RAM_SIZE - 0x100000) {
+        printf("vm: kernel too large (%u bytes) for %uKB guest RAM\n",
+               kernel_file.size, GUEST_RAM_SIZE / 1024);
+        return 0;
+    }
+    uint32_t initrd_guest =
+        (0x100000u + kernel_file.size + 0xFFFu) & ~0xFFFu;
+    if (initrd_file.size > GUEST_RAM_SIZE - initrd_guest) {
+        printf("vm: initrd too large (%u bytes) for %uKB guest RAM\n",
+               initrd_file.size, GUEST_RAM_SIZE / 1024);
+        return 0;
+    }
+    
+    /* Load kernel at guest physical 1MB (0x100000) -> host virtual vm_ram + 0x100000 */
+    uint8_t *kernel_host = vm_ram + 0x100000;
+    if (iso_read_file(&kernel_file, kernel_host) != 0) {
+        printf("vm: failed to load kernel\n");
+        return 0;
+    }
+    
+    /* Load initrd right after the kernel -> host virtual vm_ram + initrd_guest */
+    uint8_t *initrd_host = vm_ram + initrd_guest;
+    if (iso_read_file(&initrd_file, initrd_host) != 0) {
+        printf("vm: failed to load initrd\n");
+        return 0;
+    }
+    
+    /* Setup Linux boot protocol (32-bit) in the kernel's setup header */
+    /* Setup header starts at offset 0x1F1 from kernel load address */
+    uint8_t *setup_hdr = kernel_host + 0x1F1;
+    
+    /* boot_flag at 0x1FE (relative to kernel load addr) = 0xAA55 */
+    *(uint16_t *)(kernel_host + 0x1FE) = 0xAA55;
+    
+    /* header at 0x202 = "HdrS" */
+    *(uint32_t *)(kernel_host + 0x202) = 0x53726448;  /* "HdrS" little-endian */
+    
+    /* version at 0x206 = 0x020A (boot protocol 2.10) */
+    *(uint16_t *)(kernel_host + 0x206) = 0x020A;
+    
+    /* type_of_loader at 0x210 = 0xFF (unknown) */
+    setup_hdr[0x210 - 0x1F1] = 0xFF;
+    
+    /* loadflags at 0x211 = LOADED_HIGH | QUIET_FLAG | CAN_USE_HEAP */
+    setup_hdr[0x211 - 0x1F1] = (1 << 0) | (1 << 5) | (1 << 7);
+    
+    /* heap_end_ptr at 0x224 = 0xFE00 */
+    *(uint16_t *)(kernel_host + 0x224) = 0xFE00;
+    
+    /* cmd_line_ptr at 0x228 = command line at 0x20000 (guest physical) */
+    uint32_t cmdline_guest = 0x20000;
+    *(uint32_t *)(kernel_host + 0x228) = cmdline_guest;
+    
+    /* ramdisk_image at 0x218 = initrd guest physical address */
+    *(uint32_t *)(kernel_host + 0x218) = initrd_guest;
+    
+    /* ramdisk_size at 0x21C = initrd size */
+    *(uint32_t *)(kernel_host + 0x21C) = initrd_file.size;
+    
+    /* cmdline_size at 0x238 */
+    const char *cmdline = "console=ttyS0 root=/dev/ram0 rdinit=/sbin/init";
+    uint32_t cmdline_len = strlen(cmdline);
+    *(uint32_t *)(kernel_host + 0x238) = cmdline_len;
+    
+    /* Copy command line to 0x20000 in guest physical -> vm_ram + 0x20000 */
+    memcpy(vm_ram + 0x20000, cmdline, cmdline_len + 1);
+    
+    /* Set up guest registers for Linux boot protocol:
+     * rdi = initrd_addr (guest physical), rsi = initrd_size */
+    vm_state.guest_rdi = initrd_guest;
+    vm_state.guest_rsi = initrd_file.size;
+    
+    /* Jump to kernel entry at guest physical 0x100000 */
+    vm_state.guest_rip = 0x100000;
+    vm_state.guest_rsp = 0x200000;
+    
+    printf("vm: Linux boot protocol setup complete, launching...\n");
+    printf("vm: guest_rip=0x%llx, guest_rsp=0x%llx, guest_rdi=0x%llx, guest_rsi=0x%llx\n",
+           vm_state.guest_rip, vm_state.guest_rsp, vm_state.guest_rdi, vm_state.guest_rsi);
+    vm_run_vm();
+    return 0;
+}
+
+static const vm_guest_t vm_guest_vmlinuz = {
+    "vmlinuz",
+    "Linux kernel (loads vmlinuz + initrd from boot ISO)",
+    0,
+    vm_guest_vmlinuz_run
+};
+
+/* 其它 guest（linux）由运行库插件在 init 时自注册到 vm 平台
+ * （linux.kplg: lx_guest 经 vm_guest_register）。 */
 int plugin_vm_init(void) {
-    uint32_t a, b, c, d;
-    vm_cpuid(1, 0, &a, &b, &c, &d);
-    (void)a;
-    (void)b;
-    (void)d;
-    printf("[VM] plugin loaded: VT-x %s, guest image %u bytes\n",
-           (c & (1u << 5)) ? "available" : "NOT available on this CPU",
+    vm_init_hw();
+    printf("[VM] plugin loaded: VT-x %s, VT-d %s, guest image %u bytes\n",
+           vm_vmx_supported ? "available" : "NOT available on this CPU",
+           vm_vtd_supported ? "available" : "not available",
            (unsigned)vm_guest_bin_len);
-    vm_set_status((c & (1u << 5)) ? "ready" : "VT-x not available");
+    vm_set_status(vm_vmx_supported ? "ready" : "VT-x not available");
     vm_guest_register(&vm_guest_kresten);
-    vm_guest_register(&lx_guest);
+    vm_guest_register(&vm_guest_vmlinuz);
     return 0;
 }
 

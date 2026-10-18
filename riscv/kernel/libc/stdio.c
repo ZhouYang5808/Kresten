@@ -18,6 +18,7 @@ static int capture_active = 0;
 static char *capture_buf = 0;
 static int capture_pos = 0;
 static int capture_max = 0;
+static int capture_discard = 0;   /* snprintf: 超出 size 的字符直接丢弃, 不落 UART */
 
 void set_output_capture(char *buf, int size) {
     capture_active = 1;
@@ -27,10 +28,11 @@ void set_output_capture(char *buf, int size) {
 }
 
 void end_output_capture(void) {
-    if (capture_active && capture_buf)
+    if (capture_active && capture_buf && capture_max >= 0)
         capture_buf[capture_pos > capture_max ? capture_max : capture_pos] = '\0';
     capture_active = 0;
     capture_buf = 0;
+    capture_discard = 0;
 }
 
 static uint8_t uart_rx_ready(void) {
@@ -47,8 +49,12 @@ static void uart_putc(char c) {
 }
 
 void putchar(char c) {
-    if (capture_active && capture_buf && capture_pos < capture_max) {
-        capture_buf[capture_pos++] = c;
+    if (capture_active && capture_buf) {
+        if (capture_pos < capture_max) {
+            capture_buf[capture_pos++] = c;
+        } else if (!capture_discard) {
+            uart_putc(c);            /* 旧行为: 捕获满则转 UART; snprintf 下丢弃 */
+        }
         return;
     }
     uart_putc(c);
@@ -306,10 +312,19 @@ int sprintf(char *buf, const char *fmt, ...) {
 }
 
 int snprintf(char *buf, size_t size, const char *fmt, ...) {
-    (void)size;
     va_list args;
     va_start(args, fmt);
-    int ret = vsprintf(buf, fmt, args);
+    int ret;
+    static char dummy[1];
+    capture_discard = 1;
+    if (!buf || size == 0) {
+        /* 无缓冲区/零长度: 只统计, 不写任何内存 */
+        set_output_capture(dummy, 1);
+    } else {
+        set_output_capture(buf, (int)size);
+    }
+    ret = vprintf(fmt, args);
+    end_output_capture();
     va_end(args);
     return ret;
 }

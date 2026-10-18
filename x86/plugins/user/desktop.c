@@ -13,6 +13,7 @@
 #include <plugin.h>
 #include <fs.h>
 #include <process.h>
+#include <guard.h>
 
 extern uint32_t sched_get_ticks(void);
 void sys_poweroff(void);
@@ -49,6 +50,49 @@ static uint8_t fb[GFX_MAX_W * GFX_MAX_H];
 static const uint8_t *font;
 static int dirty = 1;
 
+/* AA text blending: 5-5-5 RGB -> nearest palette index lookup */
+static const uint8_t *pal_rgb;
+static uint8_t mix_lut[32768];
+static int mix_lut_ok;
+
+static void build_mix_lut(void) {
+    if (mix_lut_ok)
+        return;
+    pal_rgb = gfx_get_palette_rgb();
+    for (int r = 0; r < 32; r++)
+        for (int g = 0; g < 32; g++)
+            for (int b = 0; b < 32; b++) {
+                int best = 0, bestd = 1 << 30;
+                for (int i = 0; i < 256; i++) {
+                    int dr = (int)pal_rgb[i * 3] - (r * 8 + 4);
+                    int dg = (int)pal_rgb[i * 3 + 1] - (g * 8 + 4);
+                    int db = (int)pal_rgb[i * 3 + 2] - (b * 8 + 4);
+                    int d = dr * dr + dg * dg + db * db;
+                    if (d < bestd) { bestd = d; best = i; }
+                }
+                mix_lut[(r << 10) | (g << 5) | b] = (uint8_t)best;
+            }
+    mix_lut_ok = 1;
+}
+
+/* draw one AA pixel: fg over current fb background, alpha 0..15 */
+static void fb_px(int x, int y, uint8_t c);
+static void fb_aa_px(int x, int y, uint8_t fg, int a) {
+    if (x < 0 || x >= GFX_W || y < 0 || y >= GFX_H || a <= 0)
+        return;
+    if (a >= 15) {
+        fb_px(x, y, fg);
+        return;
+    }
+    uint8_t bg = fb[(uint32_t)y * GFX_W + (uint32_t)x];
+    const uint8_t *fr = pal_rgb + fg * 3;
+    const uint8_t *br = pal_rgb + bg * 3;
+    int r = (fr[0] * a + br[0] * (15 - a) + 7) / 15;
+    int g = (fr[1] * a + br[1] * (15 - a) + 7) / 15;
+    int b = (fr[2] * a + br[2] * (15 - a) + 7) / 15;
+    fb_px(x, y, mix_lut[((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3)]);
+}
+
 static void fb_px(int x, int y, uint8_t c) {
     if (x < 0 || x >= GFX_W || y < 0 || y >= GFX_H)
         return;
@@ -79,14 +123,15 @@ static void fb_vline(int x, int y, int h, uint8_t c) {
 static void fb_text(int x, int y, const char *s, uint8_t fg) {
     if (!s)
         return;
+    build_mix_lut();
     while (*s) {
-        const uint8_t *glyph = font + (uint32_t)(uint8_t)*s * 32;
-        for (int row = 0; row < 16; row++) {
-            uint8_t bits = glyph[row];
-            for (int col = 0; col < 8; col++)
-                if (bits & (0x80 >> col))
-                    fb_px(x + col, y + row, fg);
-        }
+        const uint8_t *glyph = font + (uint32_t)(uint8_t)*s * 64;
+        for (int row = 0; row < 16; row++)
+            for (int col = 0; col < 8; col++) {
+                int a = (glyph[row * 4 + (col >> 1)] >> ((col & 1) ? 0 : 4)) & 0x0F;
+                if (a)
+                    fb_aa_px(x + col, y + row, fg, a);
+            }
         x += 8;
         s++;
     }
@@ -98,18 +143,21 @@ static void fb_text_center(int cx, int y, const char *s, uint8_t fg) {
 
 /* 2x scaled text (8x16 -> 16x32), for headings */
 static void fb_text2x(int x, int y, const char *s, uint8_t fg) {
+    if (!s)
+        return;
+    build_mix_lut();
     while (*s) {
-        const uint8_t *glyph = font + (uint32_t)(uint8_t)*s * 32;
-        for (int row = 0; row < 16; row++) {
-            uint8_t bits = glyph[row];
-            for (int col = 0; col < 8; col++)
-                if (bits & (0x80 >> col)) {
-                    fb_px(x + col * 2, y + row * 2, fg);
-                    fb_px(x + col * 2 + 1, y + row * 2, fg);
-                    fb_px(x + col * 2, y + row * 2 + 1, fg);
-                    fb_px(x + col * 2 + 1, y + row * 2 + 1, fg);
-                }
-        }
+        const uint8_t *glyph = font + (uint32_t)(uint8_t)*s * 64;
+        for (int row = 0; row < 16; row++)
+            for (int col = 0; col < 8; col++) {
+                int a = (glyph[row * 4 + (col >> 1)] >> ((col & 1) ? 0 : 4)) & 0x0F;
+                if (!a)
+                    continue;
+                fb_aa_px(x + col * 2, y + row * 2, fg, a);
+                fb_aa_px(x + col * 2 + 1, y + row * 2, fg, a);
+                fb_aa_px(x + col * 2, y + row * 2 + 1, fg, a);
+                fb_aa_px(x + col * 2 + 1, y + row * 2 + 1, fg, a);
+            }
         x += 16;
         s++;
     }
@@ -175,7 +223,7 @@ static int cur_x = 160, cur_y = 100;
 
 /* ---- icon pixel art (shared by App Manager and apps) ---- */
 enum {
-    ACT_SHELL, ACT_FMGR, ACT_MYCOMP, ACT_RECYCLE, ACT_LINUX, ACT_VM
+    ACT_SHELL, ACT_FMGR, ACT_MYCOMP, ACT_RECYCLE, ACT_LINUX, ACT_VM, ACT_TASKMGR
 };
 
 /* ---- modern pixel icons, 24x24 ---- */
@@ -225,6 +273,14 @@ static void draw_icon_art(int x, int y, int kind) {
         fb_rect(x + 10, y + 19, 4, 3, C_GRAY_MID);
         fb_rect(x + 6, y + 22, 12, 2, C_GRAY_MID);
         break;
+    case ACT_TASKMGR: /* task manager - bar chart */
+        fb_rrect(x + 2, y + 2, 20, 20, 4, C_GRAY_DARK);
+        fb_rect(x + 4, y + 18, 3, 4, C_RED);
+        fb_rect(x + 8, y + 14, 3, 8, C_ORANGE);
+        fb_rect(x + 12, y + 10, 3, 12, C_GREEN);
+        fb_rect(x + 16, y + 6, 3, 16, C_ACCENT);
+        fb_rect(x + 20, y + 4, 3, 18, C_TEAL);
+        break;
     default:
         break;
     }
@@ -232,16 +288,16 @@ static void draw_icon_art(int x, int y, int kind) {
 
 /* ---- apps ---- */
 enum {
-    APP_MANAGER, APP_SHELL, APP_FMGR, APP_MYCOMP, APP_RECYCLE, APP_LINUX, APP_VM
+    APP_MANAGER, APP_SHELL, APP_FMGR, APP_MYCOMP, APP_RECYCLE, APP_LINUX, APP_VM, APP_TASKMGR
 };
 
 static const char *app_titles[] = {
     "App Manager", "MS-DOS Prompt", "File Manager",
-    "My Computer", "Recycle Bin", "Linux Subsystem", "Virtual Machine"
+    "My Computer", "Recycle Bin", "Linux Subsystem", "Virtual Machine", "Task Manager"
 };
 
 /* launchable apps shown in the App Manager */
-static const int app_kinds[] = { APP_SHELL, APP_FMGR, APP_MYCOMP, APP_RECYCLE, APP_LINUX, APP_VM };
+static const int app_kinds[] = { APP_SHELL, APP_FMGR, APP_MYCOMP, APP_RECYCLE, APP_LINUX, APP_VM, APP_TASKMGR };
 #define APP_COUNT ((int)(sizeof(app_kinds) / sizeof(app_kinds[0])))
 
 static const char *app_desc[] = {
@@ -251,6 +307,7 @@ static const char *app_desc[] = {
     "Deleted files live here",
     "Run the built-in Linux subsystem (WSL-style)",
     "Run the built-in VT-x virtual machine (VMware-style)",
+    "View running processes, memory usage, and CPU info",
 };
 
 /* ---- tabs ---- */
@@ -346,7 +403,7 @@ static void run_shell(void) {
     gfx_leave();
     plugin_dispatch("shell", NULL);
     gfx_enter();
-    font = gfx_get_font();
+    font = gfx_get_font_aa();
     while (keyboard_poll_scancode() >= 0) /* flush */
         ;
     dirty = 1;
@@ -361,7 +418,7 @@ static void run_linux(void) {
     plugin_dispatch("vm", "linux");
     puts("[LX] session ended, returning to desktop\n");
     gfx_enter();
-    font = gfx_get_font();
+    font = gfx_get_font_aa();
     keyboard_flush();
     dirty = 1;
 }
@@ -409,7 +466,7 @@ static void run_vm(void) {
     plugin_dispatch("vm", NULL);
     puts("[VM] session ended, returning to desktop\n");
     gfx_enter();
-    font = gfx_get_font();
+    font = gfx_get_font_aa();
     keyboard_flush();
     dirty = 1;
 }
@@ -460,6 +517,49 @@ static void vm_click(int mx, int my) {
 static void vm_key(int sc) {
     if (sc == 0x1C)
         run_vm();
+    else if (sc == 0x01)
+        tab_close(active);
+}
+
+static void run_taskmgr(void) {
+    keyboard_flush();
+    gfx_leave();
+    plugin_dispatch("taskmgr", "--graphical");
+    puts("[TM] session ended, returning to desktop\n");
+    gfx_enter();
+    font = gfx_get_font_aa();
+    keyboard_flush();
+    dirty = 1;
+}
+
+static void taskmgr_draw(void) {
+    int cx = GFX_W / 2;
+    int cy = TAB_BAR_H + (GFX_H - TAB_BAR_H) / 2;
+    fb_rect(0, TAB_BAR_H, GFX_W, GFX_H - TAB_BAR_H, C_BLACK);
+    int fx = cx - 130, fy = cy - 140, fw = 260, fh = 200;
+    fb_rrect(fx, fy, fw, fh, 12, C_SURFACE_HI);
+    fb_rect(fx, fy + 20, fw, fh - 20, C_BLACK);
+    fb_circle(fx + 28, fy + 10, 4, C_RED);
+    fb_circle(fx + 46, fy + 10, 4, C_ORANGE);
+    fb_circle(fx + 64, fy + 10, 4, C_GREEN);
+    fb_text(fx + 24, fy + 34, "> taskmgr", C_GREEN);
+    fb_text(fx + 24, fy + 56, "click to launch the", C_GRAY_MID);
+    fb_text(fx + 24, fy + 76, "graphical Task Manager", C_GRAY_MID);
+    fb_hline(fx + 24, fy + 100, 60, C_GREEN);
+    fb_text2x_center(cx, fy + fh + 18, "Task Manager", C_GRAY_HI);
+    fb_text_center(cx, fy + fh + 62, "Click anywhere or press Enter to open Task Manager",
+                   C_GRAY_MID);
+}
+
+static void taskmgr_click(int mx, int my) {
+    (void)mx;
+    (void)my;
+    run_taskmgr();
+}
+
+static void taskmgr_key(int sc) {
+    if (sc == 0x1C)
+        run_taskmgr();
     else if (sc == 0x01)
         tab_close(active);
 }
@@ -755,6 +855,9 @@ static void draw_all(void) {
     case APP_VM:
         vm_draw();
         break;
+    case APP_TASKMGR:
+        taskmgr_draw();
+        break;
     default:
         break;
     }
@@ -842,6 +945,9 @@ static void click_at(int mx, int my) {
     case APP_VM:
         vm_click(mx, my);
         break;
+    case APP_TASKMGR:
+        taskmgr_click(mx, my);
+        break;
     default:
         break;
     }
@@ -881,6 +987,9 @@ static void handle_key(int sc) {
     case APP_RECYCLE:
         app_close_key(sc);
         break;
+    case APP_TASKMGR:
+        taskmgr_key(sc);
+        break;
     default:
         break;
     }
@@ -891,7 +1000,8 @@ void desktop_enter(void) {
     puts("[DESKTOP] tabbed desktop started\n");
     desktop_exit = 0;
     gfx_enter();
-    font = gfx_get_font();
+    guard_finish();
+    font = gfx_get_font_aa();
     {
         int sw = 0, sh = 0;
         gfx_get_screen_size(&sw, &sh);

@@ -11,7 +11,6 @@
 #include <stdint.h>
 #include <io.h>
 #include <gfx.h>
-#include <font8x16.h>
 
 extern void vga_clear(void);
 
@@ -39,9 +38,14 @@ static int use_vbe = 0;
 static int use_svga = 0;
 static int bpp = 8;               /* bytes per pixel on the panel */
 static uint32_t svga_pal[256];    /* 8-bit index -> 32bpp color (SVGA) */
+static uint8_t pal_rgb8[256][3];  /* 8-bit RGB per palette index */
 
 const uint8_t *gfx_get_font(void) {
     return font_buf;
+}
+
+const uint8_t *gfx_get_palette_rgb(void) {
+    return &pal_rgb8[0][0];
 }
 
 /* ---- VGA register sets ----
@@ -470,12 +474,15 @@ static void gfx_set_palette(void) {
         outb(0x3C9, rgb[i][1]);
         outb(0x3C9, rgb[i][2]);
     }
-    /* 32bpp lookup table (8-bit components, opaque alpha) for VMware SVGA */
+/* 32bpp lookup table (8-bit components, opaque alpha) for VMware SVGA */
     for (int i = 0; i < 256; i++) {
         uint32_t r = (uint32_t)rgb[i][0] * 255 / 63;
         uint32_t g = (uint32_t)rgb[i][1] * 255 / 63;
         uint32_t b = (uint32_t)rgb[i][2] * 255 / 63;
         svga_pal[i] = 0xFF000000U | (r << 16) | (g << 8) | b;
+        pal_rgb8[i][0] = (uint8_t)r;
+        pal_rgb8[i][1] = (uint8_t)g;
+        pal_rgb8[i][2] = (uint8_t)b;
     }
 }
 
@@ -483,8 +490,9 @@ static void gfx_set_palette(void) {
  * Mode 13h uses chained memory writes that hit all four planes, which
  * would otherwise destroy the character generator font. */
 static void gfx_save_font(void) {
+    const uint8_t *bmp = gfx_font_bmp();   /* font.kdrv 提供的 1-bit Terminus */
     for (int i = 0; i < 8192; i++)
-        font_buf[i] = vga_font8x16[i];
+        font_buf[i] = bmp[i];
 }
 
 static void gfx_restore_font(void) {
@@ -773,12 +781,5 @@ static int gfx_init(void) {
     return 0;
 }
 
-static Driver gfx_driver = {
-    .name = "gfx",
-    .type = DRV_TYPE_LCD,
-    .init = gfx_init,
-};
-
-int gfx_driver_register(void) {
-    return driver_register(&gfx_driver);
-}
+/* .kdrv 驱动模块: 加载器(plugin.c drv_load_all)解析 kdrv_driver 注册 */
+REGISTER_DRIVER("gfx", DRV_TYPE_LCD, gfx_init);

@@ -93,14 +93,71 @@ trap_entry:
     beq t6, t5, .Lsvc
     li t5, 3                   /* ebreak (glibc _start 尾部) -> exit */
     beq t6, t5, .Lsvc
-    li t5, 2                   /* illegal instruction -> 打印 + 挂起 */
-    beq t6, t5, .Ldie
+    li   t5, 2                   /* illegal instruction -> 打印 + 挂起 */
+    beq  t6, t5, .Ldie
     /* 其他异常: 打印 mcause/mepc/mstatus 后挂起 */
 .Ldie:
+    /* ---- 崩溃守护 hook: 若已武装, 填充现场并转 guardian 报告 ----
+     * 保留区 0x87FF0000: magic 0x31445247, report 入口 +0x500。
+     * 常量不得用 li 32 位符号扩展 (会变成 0xFFFFFFFF87FF0000 越界地址),
+     * 用 lui + slli + srli 构造正的 64 位值。 */
+    lui  t1, 0x87FF0
+    slli t1, t1, 32
+    srli t1, t1, 32
+    lw   t2, 0(t1)
+    li   t3, 0x31445247
+    bne  t2, t3, .Ldie_nog
+    /* 拷贝 16 个寄存器 (trap 帧, 顺序同 guard.h regs[16]) */
+    addi t2, t1, 0x88
+    mv   t3, sp
+    li   t4, 16
+1:  ld   t5, 0(t3)
+    sd   t5, 0(t2)
+    addi t3, t3, 8
+    addi t2, t2, 8
+    addi t4, t4, -1
+    bnez t4, 1b
+    ld   t5, 240(sp)              /* 访客 sp */
+    sd   t5, 0x108(t1)
+    ld   t5, 248(sp)              /* mepc */
+    sd   t5, 0x110(t1)
+    ld   t5, 256(sp)              /* mstatus */
+    sd   t5, 0x118(t1)
+    /* 栈快照: 访客 sp 起 8 个词 */
+    ld   t3, 240(sp)
+    addi t2, t1, 0x120
+    li   t4, 8
+2:  ld   t5, 0(t3)
+    sd   t5, 0(t2)
+    addi t3, t3, 8
+    addi t2, t2, 8
+    addi t4, t4, -1
+    bnez t4, 2b
+    /* cause=1 (EXCEPTION), cause_str="UNHANDLED TRAP" (sw 连续, 无 NUL 夹断) */
+    li   t2, 1
+    sw   t2, 0x08(t1)
+    li   t2, 0x41484E55           /* "UNHA" */
+    sw   t2, 0x48(t1)
+    li   t2, 0x454C444E           /* "NDLE" */
+    sw   t2, 0x4C(t1)
+    li   t2, 0x52542044           /* "D TR" */
+    sw   t2, 0x50(t1)
+    li   t2, 0x00005041           /* "AP\0" */
+    sw   t2, 0x54(t1)
+    /* 转 guardian 报告 (不返回); 入口约定 a0=region */
+    mv   a0, t1
+    li   t0, 0x500
+    add  t0, t0, t1
+    jalr zero, t0, 0
+.Ldie_nog:
     csrr a0, mcause
     csrr a1, mepc
     csrr a2, mstatus
-    call trap_unhandled
+    /* 实现经内核桥指针 trap_unhandled 间接调用 (vm.kplg init 注册; 未注册挂起) */
+    la   t6, trap_unhandled
+    ld   t6, 0(t6)
+    beqz t6, 1f
+    jalr ra, t6, 0
 1:  wfi
     j 1b
 
@@ -120,7 +177,11 @@ trap_entry:
     ld a3,  80(sp)
     ld a4,  88(sp)
     ld a5,  96(sp)
-    call linux_syscall_dispatch
+    /* 实现经内核桥指针 linux_syscall_dispatch 间接调用 (vm.kplg init 注册) */
+    la   t6, linux_syscall_dispatch
+    ld   t6, 0(t6)
+    beqz t6, .Ldie
+    jalr ra, t6, 0
     sd a0,  64(sp)             /* 返回值写入访客 a0 */
     /* mepc += 4 (ecall 32 位; ebreak 是 16 位但走 exit 路径不会回来),
      * 并立即写回 CSR (恢复路径从帧取)。 */

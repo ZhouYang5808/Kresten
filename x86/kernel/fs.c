@@ -395,6 +395,7 @@ int fs_cp(const char *src, const char *dst) {
     if (!fs_resolve_path(dst, dst_res, sizeof(dst_res))) return -1;
     FSEntry *e = find_entry_mutable(src_res);
     if (!e || e->entry.type != FS_TYPE_FILE) return -1;
+    if (path_exists(dst_res)) return -1;   /* 目标已存在: 拒绝, 否则重复条目+strdup 泄漏 */
     return add_entry(dst_res, FS_TYPE_FILE,
                      e->entry.size, e->content);
 }

@@ -14,5 +14,6 @@ void *calloc(size_t nmemb, size_t size);
 void *realloc(void *ptr, size_t size);
 
 void heap_init(void *start, size_t len);
+void heap_extend(void *addr, size_t size);
 
 #endif

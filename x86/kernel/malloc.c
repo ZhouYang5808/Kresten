@@ -68,6 +68,16 @@ static void insert_free(block_t *b) {
     free_list = b;
 }
 
+/* 堆外扩容: 把保留区 (守护自毁后) 整块加入空闲表。
+ * 不做前后合并: 合并只信任池内块 (merge_adjacent 有 heap_pool 边界检查)。 */
+void heap_extend(void *addr, size_t size) {
+    heap_ensure();
+    if (!addr || size < sizeof(block_t) + 8) return;
+    block_t *b = (block_t *)addr;
+    b->size = size - sizeof(block_t);
+    insert_free(b);
+}
+
 static block_t *merge_adjacent(block_t *a) {
     block_t *b = (block_t *)((char *)a + sizeof(block_t) + a->size);
     if ((char *)b < (char *)heap_pool + HEAP_SIZE &&
@@ -121,4 +131,21 @@ void *realloc(void *ptr, size_t size) {
     memcpy(newp, ptr, copy);
     free(ptr);
     return newp;
+}
+
+/* Kernel memory allocation aliases */
+void *kmalloc(size_t size) {
+    return malloc(size);
+}
+
+void kfree(void *ptr) {
+    free(ptr);
+}
+
+void *kcalloc(size_t nmemb, size_t size) {
+    return calloc(nmemb, size);
+}
+
+void *krealloc(void *ptr, size_t size) {
+    return realloc(ptr, size);
 }

@@ -1,6 +1,6 @@
-/* ===== kernel/net.c (RISC-V): virt 机器无 SMC91C111 -> 协议栈保留, 硬件 stub =====
- * 与 ARM 版相同的 TCP/IP/ARP/DHCP/DNS 逻辑, 仅替换 SMC 寄存器访问为
- * "无网卡" stub (net_init 失败)。net 命令仍可运行, 报 "no NIC"。
+/* ===== kernel/net.c (RISC-V): virt 机器无网卡 -> 协议栈保留, 硬件 stub =====
+ * TCP/IP/ARP/DHCP/DNS 协议逻辑, 但 virt 平台没有可用的网络硬件,
+ * 网卡层为 "无网卡" stub (net_init 失败)。net 命令仍可运行, 报 "no NIC"。
  */
 #include <net.h>
 #include <stdio.h>
@@ -130,7 +130,7 @@ uint32_t str_to_ip(const char *str) {
     return v;
 }
 
-/* ===== RISC-V: 无 SMC91C111 硬件, 全部 stub ===== */
+/* ===== RISC-V: virt 机器无网卡硬件, 全部 stub ===== */
 static int smc_init(void) {
     return -1;
 }

@@ -9,5 +9,6 @@ int keyboard_pending(void);
 int keyboard_poll_scancode(void);
 int keyboard_scancode_pending(void);
 void keyboard_flush(void);
+void keyboard_discard_pending(void);
 
 #endif

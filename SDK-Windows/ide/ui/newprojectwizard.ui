@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>NewProjectWizard</class>
+ <widget class="QWizard" name="NewProjectWizard">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>450</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>New Project Wizard</string>
+  </property>
+  <property name="wizardStyle">
+   <enum>QWizard::ModernStyle</enum>
+  </property>
+  <widget class="QWizardPage" name="projectTypePage">
+   <property name="title">
+    <string>Select Project Type</string>
+   </property>
+   <property name="subTitle">
+    <string>Choose the type of project you want to create.</string>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QLabel" name="label">
+      <property name="text">
+       <string>Project Type:</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QComboBox" name="projectTypeCombo">
+      <item>
+       <property name="text">
+        <string>Kresten Kernel Module (.kplg)</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Kresten Driver (.kdrv)</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Kresten Application</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Generic C/C++ Project</string>
+       </property>
+      </item>
+     </widget>
+    </item>
+    <item>
+     <widget class="QGroupBox" name="descriptionGroup">
+      <property name="title">
+       <string>Description</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <item>
+        <widget class="QLabel" name="descriptionLabel">
+         <property name="text">
+          <string>Create a loadable kernel plugin for the Kresten OS.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWizardPage" name="projectDetailsPage">
+   <property name="title">
+    <string>Project Details</string>
+   </property>
+   <property name="subTitle">
+    <string>Enter the project name and location.</string>
+   </property>
+   <layout class="QFormLayout" name="formLayout">
+    <item row="0" column="0">
+     <widget class="QLabel" name="label_2">
+      <property name="text">
+       <string>Project Name:</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="1">
+     <widget class="QLineEdit" name="projectNameEdit"/>
+    </item>
+    <item row="1" column="0">
+     <widget class="QLabel" name="label_3">
+      <property name="text">
+       <string>Location:</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="1">
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <item>
+       <widget class="QLineEdit" name="locationEdit"/>
+      </item>
+      <item>
+       <widget class="QPushButton" name="browseLocationBtn">
+        <property name="text">
+         <string>Browse...</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item row="2" column="0">
+     <widget class="QLabel" name="label_4">
+      <property name="text">
+       <string>Author:</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="1">
+     <widget class="QLineEdit" name="authorEdit"/>
+    </item>
+    <item row="3" column="0">
+     <widget class="QLabel" name="label_5">
+      <property name="text">
+       <string>Version:</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="1">
+     <widget class="QLineEdit" name="versionEdit">
+      <property name="text">
+       <string>1.0.0</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWizardPage" name="buildConfigPage">
+   <property name="title">
+    <string>Build Configuration</string>
+   </property>
+   <property name="subTitle">
+    <string>Configure build settings for your project.</string>
+   </property>
+   <layout class="QFormLayout" name="formLayout_2">
+    <item row="0" column="0">
+     <widget class="QLabel" name="label_6">
+      <property name="text">
+       <string>Target Architecture:</string>
+      </property>
+     </widget>
+    </item>
+    <item row="0" column="1">
+     <widget class="QComboBox" name="archCombo">
+      <item>
+       <property name="text">
+        <string>x86_64</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>ARM64</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>RISC-V 64</string>
+       </property>
+      </item>
+     </widget>
+    </item>
+    <item row="1" column="0">
+     <widget class="QLabel" name="label_7">
+      <property name="text">
+       <string>Build Type:</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="1">
+     <widget class="QComboBox" name="buildTypeCombo">
+      <item>
+       <property name="text">
+        <string>Debug</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Release</string>
+       </property>
+      </item>
+     </widget>
+    </item>
+    <item row="2" column="0">
+     <widget class="QLabel" name="label_8">
+      <property name="text">
+       <string>Compiler:</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="1">
+     <widget class="QComboBox" name="compilerCombo">
+      <item>
+       <property name="text">
+        <string>GCC</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>Clang</string>
+       </property>
+      </item>
+     </widget>
+    </item>
+    <item row="3" column="0">
+     <widget class="QLabel" name="label_9">
+      <property name="text">
+       <string>C Standard:</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="1">
+     <widget class="QComboBox" name="cStandardCombo">
+      <item>
+       <property name="text">
+        <string>C11</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>C17</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>C23</string>
+       </property>
+      </item>
+     </widget>
+    </item>
+    <item row="4" column="0">
+     <widget class="QLabel" name="label_10">
+      <property name="text">
+       <string>C++ Standard:</string>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="1">
+     <widget class="QComboBox" name="cppStandardCombo">
+      <item>
+       <property name="text">
+        <string>C++17</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>C++20</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>C++23</string>
+       </property>
+      </item>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWizardPage" name="finishPage">
+   <property name="title">
+    <string>Finish</string>
+   </property>
+   <property name="subTitle">
+    <string>Review your project settings and click Finish to create the project.</string>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout_3">
+    <item>
+     <widget class="QTextEdit" name="summaryText">
+      <property name="readOnly">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

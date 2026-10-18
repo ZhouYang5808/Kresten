@@ -74,12 +74,5 @@ int mouse_init(void) {
     return 0;
 }
 
-static Driver mouse_driver = {
-    .name = "mouse",
-    .type = DRV_TYPE_KEYBOARD,
-    .init = mouse_init,
-};
-
-int mouse_driver_register(void) {
-    return driver_register(&mouse_driver);
-}
+/* .kdrv 驱动模块(引用 ps2packet.kdrv 的 ps2_packet_feed/ps2_consume) */
+REGISTER_DRIVER("mouse", DRV_TYPE_KEYBOARD, mouse_init);

@@ -11,6 +11,7 @@
  */
 #include <stdint.h>
 #include <mouse.h>
+#include <driver.h>
 
 void ps2_packet_feed(uint8_t b);
 int ps2_consume(int *dx, int *dy, int *buttons);
@@ -50,3 +51,6 @@ int ps2_consume(int *dx, int *dy, int *buttons) {
     if (buttons) *buttons = b;
     return (x != 0 || y != 0 || b != 0) ? 1 : 0;
 }
+
+/* .kdrv 驱动模块: 纯函数库(mouse.kdrv 依赖), 无 init */
+REGISTER_DRIVER("ps2packet", DRV_TYPE_KEYBOARD, 0);

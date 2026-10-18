@@ -21,14 +21,30 @@ void proc_entry(Process *p) {
 }
 
 int proc_create(const char *name, void (*entry)(void)) {
-    if (proc_count >= MAX_PROC) return -1;
-    Process *p = &procs[proc_count];
+    /* 优先复用 EXITED 槽位（LX 每次运行都 proc_create，不复用会在 16 次后耗尽） */
+    int slot = -1;
+    for (int i = 0; i < proc_count; i++) {
+        if (procs[i].state == PROC_EXITED) { slot = i; break; }
+    }
+    if (slot < 0) {
+        if (proc_count >= MAX_PROC) return -1;
+        slot = proc_count;
+    }
+    void *stack = malloc(PROC_STACK_SIZE);
+    if (!stack) return -1;
+    Process *p = &procs[slot];
+    /* 复用已退出进程的槽位：它的栈早已不再使用，此刻可安全释放
+     * （proc_exit 不能立即释放，因为当时 CPU 正执行在该栈上）。 */
+    if (slot < proc_count) {
+        if (p->stack) free(p->stack);
+    } else {
+        proc_count++;
+    }
     strncpy(p->name, name, PROC_NAME_LEN - 1);
     p->name[PROC_NAME_LEN - 1] = '\0';
     p->state = PROC_READY;
     p->entry = (uint64_t)(uintptr_t)entry;
-    p->stack = malloc(PROC_STACK_SIZE);
-    if (!p->stack) return -1;
+    p->stack = stack;
     uint64_t *sp = (uint64_t *)((char *)p->stack + PROC_STACK_SIZE);
     *--sp = (uint64_t)(uintptr_t)p;
     p->context.rip = (uint64_t)(uintptr_t)proc_entry_wrapper;
@@ -42,8 +58,7 @@ int proc_create(const char *name, void (*entry)(void)) {
     /* IF=0：首次进入以关中断跑启动链（proc_entry -> lx_thread_main ->
      * iretq 弹 RFLAGS=0x202 进用户态 IF=1），syscall 处理不被 PIT 打断 */
     p->context.rflags = 0x2;
-    proc_count++;
-    return proc_count - 1;
+    return slot;
 }
 
 void proc_yield(void) {
@@ -62,9 +77,8 @@ void proc_exit(int code) {
     (void)code;
     Process *p = &procs[current];
     p->state = PROC_EXITED;
-    /* 不能 free 当前进程的栈：CPU 正用它执行（proc_exit 自身的帧在栈上），
-     * 释放后堆管理器写链表头会覆盖活跃帧，导致下一次中断/恢复全 0 而 iretq #GP。 */
-    p->stack = 0;
+    /* 不能在此 free 当前栈（proc_exit 自身的帧在栈上），但保留 p->stack 指针，
+     * 由后续 proc_create 复用该槽位时释放。 */
     for (int i = 0; i < proc_count; i++) {
         if (i != current && procs[i].state == PROC_READY) {
             current = i;
@@ -93,4 +107,12 @@ void proc_list(void) {
 Process *proc_current(void) {
     if (proc_count == 0) return 0;
     return &procs[current];
+}
+
+int proc_get_count(void) {
+    return proc_count;
+}
+
+Process *proc_get_all(void) {
+    return procs;
 }

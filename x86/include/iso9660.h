@@ -11,6 +11,8 @@ typedef struct {
 
 /* 解析 drive 上光驱的 PVD(卷描述符);返回 0 成功。 */
 int  iso_mount(uint8_t drive);
+/* 扫描 0..3 槽, 挂载卷标为 vol 的光驱 (如 "WINETINY"); 返回 0 成功。 */
+int  iso_mount_volid(const char *vol);
 const char *iso_volid(void);
 /* 当前挂载的光驱槽位号 */
 uint8_t iso_drive(void);

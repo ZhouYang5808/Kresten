@@ -11,12 +11,7 @@ SECTIONS
     .text : {
         *(.text)
         *(.rodata)
-    }
-
-    .plugins : {
-        __plugins_start = .;
-        *(.plugins)
-        __plugins_end = .;
+        *(.rodata.guard)
     }
 
     .crt_compressed : { INCLUDE "crt_compressed.ld" }
@@ -39,6 +34,17 @@ SECTIONS
     . = ALIGN(4096);
     _end = .;
 
+    /* Kernel export table for the dynamic plugin loader (kernel/kplg.c).
+     * MUST be the LAST section: the two-pass link (kernel.elf.1st -> nm ->
+     * kernel_symtab.c -> kernel.elf) fills it after the first pass, so all
+     * earlier symbols keep identical addresses in both passes. */
+    . = ALIGN(4096);
+    .ksymtab : {
+        KEEP(*(.ksymtab))
+    }
+    . = ALIGN(4096);
+    _end_ksymtab = .;
+
     /* BSP stack: keep out of the LX user image region (0x400000-0xE00000)
      * so page-aligned ELF loading never clobbers the running stack. */
     . = 0xE01000;
@@ -47,9 +53,9 @@ SECTIONS
     stack_top = .;
 
     /* Installer image (5MB+): must NOT live in .rodata/.text (it would push
-     * .plugins past the 0x600000 .data region -> section overlap), and it
-     * does not fit after .bss (only ~2MB free before the stack).  Place it
-     * above the stack, well below the VBE LFB at 0xE0000000. */
+     * later sections past the 0x600000 .data region -> section overlap), and
+     * it does not fit after .bss (only ~2MB free before the stack).  Place
+     * it above the stack, well below the VBE LFB at 0xE0000000. */
     . = 0xE04000;
     .install_img : {
         KEEP(*(.install_img))

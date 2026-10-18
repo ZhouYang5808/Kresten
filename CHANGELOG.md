@@ -1,5 +1,36 @@
 # Kresten 更新日志
 
+## v3.1 (2026-10-18) — 全动态插件架构与 Windows 程序运行时
+
+### 新增功能
+
+- **全动态插件架构 (.kplg)** (x86/ARM/RISC-V):插件不再静态链接,全部编译为 ELF64 共享对象,启动时由内核迷你动态链接器 (`kernel/kplg.c`) 从 ISO `/plugins/{kernel,runtime,user}` 或内嵌表加载
+  - 双遍链接生成内核符号导出表 `.ksymtab` (~318 符号);解析顺序:自身 dynsym → 内核导出表 → 已加载模块
+  - 内嵌插件表 (kplg_embed):安装器/硬盘启动无插件 ISO 时自动回退加载
+  - Shell `plugins` / `plugins load <name>` 命令管理插件;ARM (SHT_REL/SHT_RELA) 与 RISC-V (RELA) 同步实现
+- **动态外设驱动 (.kdrv)** (x86):外设驱动 (gfx/kbd/mouse/rtc/ps2packet/rootfs 等) 编译为可加载模块,启动时先于插件按依赖顺序加载;字体数据独立成模块 (`fonts/`,含 1-bit 点阵与 4-bit AA 两套字模)
+- **Wine / Windows 程序运行时** (x86):`vm linux wine <prog>` 在 LX 子系统内运行 Windows 程序
+  - 真实 Wine 直接跑在 LX 上:wine loader (ET_DYN) + ld.so 动态链接,libc/wine 的 .so 全部经 LX syscall (open/mmap/read) 从介质读取后由 ld.so 装载
+  - wine-tiny.iso 最小运行介质 (卷标 WINETINY,`/WINE/*.SO` + `/LIB/*.SO` + PE dll 闭包),静态驱动 `winefs.c` 挂载,`wine_iso_map.h` 真实路径→ISO 8.3 映射
+  - 介质生成脚本 `scripts/gen_tiny_iso.sh` + 测试 PE `scripts/gen_hello_pe.py`
+- **任务管理器** (x86):图形化进程查看器 (自绘 AA 界面,实时进程表:PID/名称/状态)
+  - 控制台 `taskmgr`、图形 `taskmgr --graphical`;桌面「Task Manager」标签页 (Enter/点击打开,ESC 返回)
+  - 内核新增 `proc_get_count()`/`proc_get_all()` 进程表导出
+- **平滑 (抗锯齿) 桌面字体** (三架构):4-bit alpha 字模取代 1-bit 点阵,边缘按 alpha 与背景混色 + 调色板最近邻查表 (5-5-5 LUT)
+- **崩溃守护 Crash Guardian** (三架构):异常处理 blob 复制到保留内存 (64 KB),看门狗超时/异常时输出完整现场报告 (原因/寄存器/堆栈) 后停机;启动完成后自毁并把内存归还内核堆
+
+### 改进
+
+- **C++ 支持**:C++ 运行时 (`libc/cpp_runtime.cpp`) + 交叉编译器包装,内核与插件可用 C++ 构建
+- 桌面 App Manager 应用一览扩展:Shell / 文件管理器 / 我的电脑 / 回收站 / Linux / 虚拟机 / 任务管理器
+- **SDK 同步 v3.1**:`SDK/` 与 `SDK-Windows/` 的 sysroot 头文件/静态库、示例 (`hello.kplg`、`my_driver.kdrv`) 与源码快照 (`SDK-Windows/src/`) 全部刷新到 v3.1 (含任务管理器);修复被截断的插件模板 `templates/plugin/plugin.c`;重打包 `SDK-Windows.tar.gz`
+
+### 修复
+
+- **x86 安装器 ISO 缺内核**:动态化重构期间 Makefile 丢失 `kernel-install` 与安装镜像内嵌规则,安装器 ISO 未携带内核;已恢复 (KRSTENBR 镜像,`.install_img` 段 0xE04000),安装到硬盘与硬盘启动重新可用
+- **任务管理器桌面入口**:插件未在自动加载列表、桌面键位分发表未接通 Enter;已修复 (自动加载 + Enter/点击启动)
+- **build_iso.ps1 构建失败**:脚本尾部误调用仓库根目录遗留的旧版安装脚本 (MyOS 时代),且从错误目录执行;已改为 WSL 构建树直接复制双 ISO 到桌面
+
 ## v2.0 (2026-08-14) — 三架构里程碑
 
 ### 新增架构支持

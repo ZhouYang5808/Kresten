@@ -58,9 +58,26 @@ vectors:
     .word hang
 
 undef_handler:
-    /* 模拟 guest(USR) 的 CP15 c13 访问: glibc 用 mcr p15,0,rt,c13,c0,3
+    /* 崩溃守护已武装 (magic+state 检查): 未定义指令 = 非法指令崩溃, 交守护 */
+    ldr r12, =0x7FF0000
+    ldr r11, [r12]            /* magic */
+    ldr r10, =0x31445247
+    cmp r11, r10
+    bne 1f                    /* 未武装: 走原 LX CP15 模拟 */
+    ldr r11, [r12, #4]        /* state */
+    cmp r11, #1
+    bne 1f
+    ldr r12, =0x7FF0120
+    str r0, [r12]             /* 存原 r0 -> H_SNAP[0] */
+    sub r0, lr, #4            /* 未定义指令地址 = lr - 4 */
+    str r0, [r12, #-16]       /* H_PC = 0x110 */
+    mrs r0, spsr
+    str r0, [r12, #-8]        /* H_EXTRA = 0x118 */
+    b grd_hook_common
+1:  /* 模拟 guest(USR) 的 CP15 c13 访问: glibc 用 mcr p15,0,rt,c13,c0,3
      * 写 TLS 槽(ARM926 无 TPIDRURO)。帧布局与 svc_handler 相同。
-     * 失败(非 mcr/mrc c13 或 rt>11)则挂起。 */
+     * 失败(非 mcr/mrc c13 或 rt>11)则挂起。
+     * 实现经内核桥指针 lx_undef_dispatch 间接调用 (vm.kplg init 注册)。 */
     ldr r12, =lx_save_sp
     str sp, [r12]
     ldr sp, =lx_trap_stack+8192
@@ -68,7 +85,12 @@ undef_handler:
     sub sp, sp, #12
     ldr r0, [sp, #60]          // lr_undef (faulting insn 在 lr-4)
     mov r1, sp                 // 帧指针
-    bl lx_undef_dispatch       // 返回新 lr; 0 = 无法模拟
+    ldr r12, =lx_undef_dispatch
+    ldr r12, [r12]             // 函数指针 (未注册=0 -> 挂起)
+    cmp r12, #0
+    beq hang
+    mov lr, pc
+    mov pc, r12                // lx_undef_dispatch(lr_undef, frame) -> 新 lr
     cmp r0, #0
     beq hang
     str r0, [sp, #60]
@@ -78,11 +100,89 @@ undef_handler:
     ldr sp, [r12]
     movs pc, lr
 
+/* ============ pabt/dabt: 崩溃守护 hook ============
+ * 现场: r0-r12 完整 (除 r0/r12 暂存), sp/lr = 内核 SVC 栈/返回地址。
+ * 先存 lr_abt/spsr_abt (banked, 切模式即丢) 到 hdr 槽 (区固定 0x7FF0000),
+ * 再用 msr cpsr_c 直接切 SVC (不破坏寄存器), 现场压内核栈,
+ * 填 hdr 后跳保留区报告入口 (region+0x500)。结尾恢复现场 r11/r12。 */
 pabt_handler:
-    b hang
+    ldr r12, =0x7FF0120
+    str r0, [r12]              /* 存原 r0 -> H_SNAP[0] */
+    sub r0, lr, #4             /* pabt: 故障 pc = lr - 4 */
+    str r0, [r12, #-16]        /* H_PC = 0x120-0x10 = 0x110 */
+    mrs r0, spsr
+    str r0, [r12, #-8]         /* H_EXTRA = 0x118 */
+    b grd_hook_common
 
 dabt_handler:
-    b hang
+    ldr r12, =0x7FF0120
+    str r0, [r12]              /* 存原 r0 -> H_SNAP[0] */
+    sub r0, lr, #8             /* dabt: 故障 pc = lr - 8 */
+    str r0, [r12, #-16]        /* H_PC */
+    mrs r0, spsr
+    str r0, [r12, #-8]         /* H_EXTRA */
+    b grd_hook_common
+
+grd_hook_common:
+    msr cpsr_c, #0xD3          /* -> SVC, IRQ/FIQ 关 (不破坏寄存器) */
+    ldr r12, =0x7FF0120
+    ldr r0, [r12]              /* 恢复原 r0 */
+    stmdb sp!, {r0-r12}        /* 现场入内核栈 (52B); 之后 r0-r12 可破坏 */
+    add r9, sp, #52            /* r9 = 故障时内核 sp (压栈前) */
+    /* regs[0..12] = r0..r12 (8 字节槽, 高位 0) */
+    mov r0, #13
+    mov r12, sp
+    ldr r10, =0x7FF0088
+1:  ldr r11, [r12], #4
+    str r11, [r10]
+    mov r11, #0
+    str r11, [r10, #4]
+    add r10, r10, #8
+    subs r0, r0, #1
+    bne 1b
+    /* regs[13]=sp, regs[14]=lr_svc, regs[15]=0 */
+    ldr r10, =0x7FF00F0
+    str r9, [r10]
+    mov r11, #0
+    str r11, [r10, #4]
+    str lr, [r10, #8]
+    str r11, [r10, #12]
+    str r11, [r10, #16]
+    str r11, [r10, #20]
+    /* H_SP = 故障 sp; H_SNAP = 故障栈顶 8 词 (压栈向下, 原内容未破坏) */
+    ldr r10, =0x7FF0108
+    str r9, [r10]
+    mov r11, #0
+    str r11, [r10, #4]
+    ldr r10, =0x7FF0120
+    mov r12, r9
+    mov r0, #8
+2:  ldr r1, [r12], #4
+    str r1, [r10]
+    mov r1, #0
+    str r1, [r10, #4]
+    add r10, r10, #8
+    subs r0, r0, #1
+    bne 2b
+    /* cause=1 + "UNHANDLED TRAP" */
+    ldr r10, =0x7FF0008
+    mov r1, #1
+    str r1, [r10]
+    ldr r10, =0x7FF0048
+    ldr r1, =0x41484E55
+    str r1, [r10]
+    ldr r1, =0x454C444E
+    str r1, [r10, #4]
+    ldr r1, =0x52542044
+    str r1, [r10, #8]
+    ldr r1, =0x00005041
+    str r1, [r10, #12]
+    /* 恢复现场 r11/r12, 跳报告 (r0 = region 基址) */
+    ldr r11, [sp, #44]
+    ldr r12, [sp, #48]
+    ldr r0, =0x7FF0000
+    ldr r12, =0x7FF0500
+    mov pc, r12
 
 irq_handler:
     b hang
@@ -111,7 +211,12 @@ svc_handler:
     ldr r5, [sp, #28]          // a5 = 原 r4
     str r4, [sp, #0]           // a4 入栈
     str r5, [sp, #4]           // a5 入栈
-    bl linux_syscall_dispatch
+    ldr r12, =linux_syscall_dispatch
+    ldr r12, [r12]             // 函数指针 (vm.kplg init 注册; 未注册=0 -> 挂起)
+    cmp r12, #0
+    beq hang
+    mov lr, pc
+    mov pc, r12                // linux_syscall_dispatch(num, a1..a5)
     mov r12, r0                // 保留返回值 (r12 可被 guest 破坏)
     add sp, sp, #12
     ldmia sp!, {r0-r11, lr}    // 恢复全部 (r0 随后被返回值覆盖)

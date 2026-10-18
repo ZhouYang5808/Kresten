@@ -96,14 +96,40 @@ static void lx_list_commands(void) {
 
 /* ---- vm guest callbacks ---- */
 
+static int lx_self_registered = 0;
+
+static int lx_guest_init(void);
+static int lx_guest_run(const char *guest_args);
+
+const vm_guest_t lx_guest = {
+    "linux",
+    "Linux subsystem - distro import (ISO rootfs) + busybox sh (ELF + syscall emulation)",
+    lx_guest_init,
+    lx_guest_run
+};
+
 static int lx_guest_init(void) {
+    if (lx_self_registered) return 0;   /* vm_guest_register 会回调 init, 防重入 */
+    lx_self_registered = 1;
     puts("[LX] Linux subsystem guest registered (WSL2-style, runs inside vm)\n");
     lx_install_syscall();
+    vm_guest_register(&lx_guest);
     return 0;
 }
 
+/* ---- 插件入口 (linux.kplg 是正式插件: 带 kplg_plugin 才有 init 入口) ----
+ * 加载顺序(kplg_auto)排在 vm 之后, plugin_init_all 统一 init 时把自己
+ * 注册到 vm 平台的 guest 表; 无 command, 一切入口走 `vm linux ...`。 */
+
+Plugin kplg_plugin __attribute__((visibility("default"))) = {
+    "linux", "Linux subsystem (distro import + busybox sh)",
+    lx_guest_init, 0
+};
+
 /* run the Linux subsystem as a vm guest. 默认 busybox sh；
- * `vm linux <program> [args...]` 可指定内置程序（busybox / hello）。 */
+ * `vm linux <program> [args...]` 可指定内置程序（busybox / hello）；
+ * `vm linux wine <prog> [args]` 用 wine 运行时（tiny ISO）运行 Windows
+ * 程序: ld.so 动态链接 + wine loader, argv[1] 为 PE 程序路径。 */
 static int lx_guest_run(const char *guest_args) {
     const char *args = guest_args ? guest_args : "";
 
@@ -122,6 +148,31 @@ static int lx_guest_run(const char *guest_args) {
     name[n] = '\0';
     const char *rest = args + n;
     while (*rest == ' ') rest++;
+
+    if (strcmp(name, "wine") == 0) {
+        /* Windows 程序由 wine 运行时运行 (tiny ISO 载入, wine_iso_map 映射);
+         * argv[1] 为 PE 程序路径 (如 /winebin/hello.exe) */
+        static char *wargv[17];
+        int wargc = 1;
+        wargv[0] = "wine";
+        if (*rest) {
+            char argbuf[512];
+            strncpy(argbuf, rest, sizeof(argbuf) - 1);
+            argbuf[sizeof(argbuf) - 1] = '\0';
+            char *p = argbuf;
+            while (*p && wargc < 16) {
+                while (*p == ' ') p++;
+                if (!*p) break;
+                wargv[wargc++] = p;
+                while (*p && *p != ' ') p++;
+                if (*p) { *p = '\0'; p++; }
+            }
+        }
+        wargv[wargc] = 0;
+        lx_run_wine(wargc, wargv);
+        keyboard_flush();            /* keep leftovers out of the host shell */
+        return 0;
+    }
 
     const LxTest *t;
     if (!name[0] || strcmp(name, "sh") == 0) {
@@ -169,10 +220,3 @@ static int lx_guest_run(const char *guest_args) {
     keyboard_flush();                /* keep leftovers out of the host shell */
     return 0;
 }
-
-const vm_guest_t lx_guest = {
-    "linux",
-    "Linux subsystem - distro import (ISO rootfs) + busybox sh (ELF + syscall emulation)",
-    lx_guest_init,
-    lx_guest_run
-};

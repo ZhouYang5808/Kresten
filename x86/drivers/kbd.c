@@ -27,12 +27,5 @@ int kbd_test(void) {
     return 0;
 }
 
-static Driver kbd_driver = {
-    .name = "kbd",
-    .type = DRV_TYPE_KEYBOARD,
-    .init = kbd_init,
-};
-
-int kbd_driver_register(void) {
-    return driver_register(&kbd_driver);
-}
+/* .kdrv 驱动模块(不再静态编译进内核; keyboard.c 仍为启动子系统驱动) */
+REGISTER_DRIVER("kbd", DRV_TYPE_KEYBOARD, kbd_init);

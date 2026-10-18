@@ -1,14 +1,19 @@
-# Kresten v2.0
+# Kresten v3.1
 
 A small hobby operating system, written from scratch, for three architectures:
-**x86** (x86-64 kernel with a tabbed browser-style GUI desktop, a real
-installer that writes itself to a hard disk, and an Intel VT-x hypervisor),
+**x86** (x86-64 kernel with a tabbed browser-style GUI desktop including a
+graphical Task Manager, a real installer that writes itself to a hard disk,
+an Intel VT-x hypervisor and a Wine runtime for Windows programs (real wine
+running under the LX subsystem),
 **ARM** (Versatile PB, semihosted console build) and **RISC-V** (QEMU virt,
 U-mode guest / M-mode kernel isolation).
 
 Each build ships with the **Linux subsystem (LX)** — a WSL1-style binary
 compatibility layer that translates Linux syscalls to Kresten kernel
 services, running a statically linked busybox `ash` shell interactively.
+Kernel plugins are **dynamically loadable** (`.kplg` ELF shared objects) at
+boot on all three architectures — and on x86, peripheral drivers and fonts
+(`.kdrv`) load the same way.
 
 ## Features
 
@@ -27,6 +32,12 @@ services, running a statically linked busybox `ash` shell interactively.
 | Linux subsystem (LX) | x86-64 busybox | ARM32 busybox | RV64 busybox |
 | LX: interactive ash | yes | yes | yes (termios2 + ppoll) |
 | LX: `/mnt/cdrom` | yes | - | - |
+| Loadable plugins (.kplg) | yes | yes | yes |
+| Loadable drivers + fonts (.kdrv) | yes | - | - |
+| Wine (Windows programs under LX) | yes | - | - |
+| Task Manager app | yes | - | - |
+| Crash Guardian (watchdog + report) | yes | yes | yes |
+| Anti-aliased desktop font | yes | yes | yes |
 
 ## Build (Windows, one command per architecture)
 
@@ -61,6 +72,42 @@ cd riscv && make && make iso      # dist/kresten-riscv.iso
 | x86 | `x86/scripts/rebuild.sh` (WSL make + ISO), `make_iso_x86.sh` (GRUB ISO), `make_install_iso_x86.sh` (installer ISO), `pack_install_img.py` (kernel → install image, `.install_img` at 0xE04000), `gen_vm_guest.sh` + `vm_guest.asm` (VT-x guest) |
 | ARM | `arm/scripts/make_iso.sh` (distribution ISO), `gen_crt_table.py` (crt_compressed.ld) |
 | RISC-V | `riscv/scripts/make_iso.sh` (distribution ISO), `gen_crt_table.py` |
+
+## Executable formats
+
+All kernels are **ELF** (statically linked, LSB). Extensions per artifact:
+
+| Artifact | Extension | Format | Notes |
+|---|---|---|---|
+| `dist/kernel.elf` (x86) | `.elf` | ELF64 x86-64 (SYSV) | GRUB multiboot from ISO (`-boot d`), or QEMU `-kernel` |
+| `dist/kernel.elf` (ARM) | `.elf` | ELF32 ARM EABI5 | QEMU `-kernel` (Versatile PB, semihosted) |
+| `dist/kernel.elf` (RISC-V) | `.elf` | ELF64 RISC-V (RVC, soft-float ABI) | QEMU `-kernel` (virt, U-mode guest) |
+| `dist/kernel-install.elf` (x86) | `.elf` | ELF64 x86-64 + embedded `.install_img` section | installer kernel: carries raw install image (`__install_img`) + 512-byte MBR |
+| `dist/kresten-x86.iso` / `kresten-x86-install.iso` | `.iso` | ISO 9660 + DOS/MBR (El Torito) boot sector | GRUB-bootable CD images |
+| `dist/kresten-arm.iso` / `kresten-riscv.iso` | `.iso` | ISO 9660 data image (kernel + README/RUN scripts) | booted via QEMU `-kernel`, not by BIOS |
+| `build/mbr.bin` (x86) | `.bin` | raw 512-byte MBR bootloader (`objcopy -O binary` from `arch/mbr.s`) | written to LBA0 by the installer |
+| install image (`scripts/pack_install_img.py` → `.install_img` section) | embedded | raw binary: `KRSTENBR`(8B) + u32 size + u32 entry + kernel | packed inside `kernel-install.elf` at 0xE04000 |
+| `plugins/vm_guest.h` (x86) | embedded | raw 32-bit protected-mode binary (1524 B, nasm from `scripts/vm_guest.asm`) | VT-x guest OS image, C array |
+| `plugins/runtime/lx_tests.h` | embedded | busybox ELF64 x86-64 (static, 1226560 B) | LX subsystem userland, C array |
+
+The guest-side executables (VT-x guest, busybox) are embedded as C arrays in headers
+(no extension on disk); the only real on-disk executables are the `.elf` kernels and
+the `.bin` MBR.
+
+## Plugins
+
+Kernel plugins are **dynamically loadable** on all three architectures: each is
+built as an ELF64 shared object (`.kplg`, `-fPIC -shared`) and loaded at boot by
+the kernel's mini dynamic linker (`kernel/kplg.c`) — x86 from the ISO
+`/plugins/{kernel,runtime,user}` directories, ARM/RISC-V from an embedded table.
+`REGISTER_PLUGIN(name)` in each plugin emits the `kplg_plugin` export struct;
+symbols resolve in order: plugin's own dynsym -> kernel export table (`.ksymtab`)
+-> already-loaded modules. Plugins: `runtime`, `vm`, `linux`, `shell`, `desktop`,
+`hello` and `taskmgr` (x86 graphical process viewer). Shell: `plugins` lists the
+loaded set, `plugins load <name>` loads + inits one.
+
+On x86, peripheral drivers are loadable too (`.kdrv`, same loader, loaded before
+plugins); boot-essential drivers (ATA, iso9660, VGA, ...) stay in the kernel.
 
 ## Run (QEMU)
 
@@ -101,7 +148,7 @@ GRUB 2.14, QEMU 10.2, genisoimage, Python 3.
 ```
 Kresten/
   README.md          this file
-  CHANGELOG.md       release history (v2.0: RISC-V, LX subsystem, ...)
+  CHANGELOG.md       release history (v3.1: dynamic plugins, Wine runtime, Task Manager, ...)
   x86/               x86-64 build (multiboot boot, GDT/IDT, MBR, installer,
                      drivers incl. ATA/iso9660/rtl8139, net stack, registry,
                      VT-x vm plugin, LX subsystem, tests/)

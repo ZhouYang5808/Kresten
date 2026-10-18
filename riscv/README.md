@@ -1,12 +1,12 @@
-# Kresten RISC-V (v2.0)
+# Kresten RISC-V (v3.1)
 
-RISC-V (QEMU virt) 移植版:U-mode 访客 + M-mode 内核的隔离模型,Linux 子系统实现最新 (完整 termios2 + 交互式 ash)。
+RISC-V (QEMU virt) 原生版本:U-mode 访客 + M-mode 内核的隔离模型,Linux 子系统实现最新 (完整 termios2 + 交互式 ash)。
 
 ## 功能
 
 - **内核**:RV64 (`riscv64-linux-gnu-gcc`,rv64gc/lp64,medany),U-mode 访客 + M-mode 内核,ecall 自陷翻译,抢占式调度器 (CLINT 100 Hz)
 - **特权模型**:访客运行于 U-mode (mstatus MPP=U),自带 8KB 陷阱栈,访客 glibc 栈 canary 检查完整通过
-- **桌面**:与 x86 相同的标签式 GUI (App Manager / Shell / FMGR / My Computer / Recycle Bin)
+- **桌面**:标签式 GUI (App Manager / Shell / FMGR / My Computer / Recycle Bin)
 - **驱动**:LCD 帧缓冲 (lcd)、键盘 (kbd)、PS/2 鼠标、RTC、CLINT timer;网络为硬件 stub (net 命令报 "no NIC")
 - **VM 插件**:软件模拟模式 (`vm_soft.c`,RISC-V 无硬件虚拟化);`vm` / `vm linux` / `vm list`
 - **Linux 子系统 (LX)**:RV64 ELF busybox (1,226,560 字节),ecall 翻译,交互式 busybox ash:

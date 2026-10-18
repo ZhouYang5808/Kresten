@@ -1,0 +1,10 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <file>icons/kresten.png</file>
+    <file>icons/plugin.png</file>
+    <file>icons/driver.png</file>
+    <file>icons/build.png</file>
+    <file>icons/run.png</file>
+    <file>icons/settings.png</file>
+</qresource>
+</RCC>

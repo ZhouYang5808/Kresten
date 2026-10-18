@@ -1,5 +1,6 @@
 #include <rtc.h>
 #include <io.h>
+#include <driver.h>
 
 #define CMOS_ADDR 0x70
 #define CMOS_DATA 0x71
@@ -34,6 +35,14 @@ void rtc_init(void) {
     unsigned char stb = cmos_read(CMOS_STAT_B);
     bcd_mode = !(stb & 0x04);
 }
+
+/* .kdrv 驱动模块(不再静态编译进内核; shell/lx_syscall 经符号表引用 rtc_read) */
+static int rtc_driver_init(void) {
+    rtc_init();
+    return 0;
+}
+
+REGISTER_DRIVER("rtc", DRV_TYPE_RTC, rtc_driver_init);
 
 void rtc_read(RTC_Time *t) {
     while (cmos_is_updating());

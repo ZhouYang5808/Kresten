@@ -13,7 +13,7 @@
 #include <driver.h>
 #include <registry.h>
 #include <net.h>
-
+#include <guard.h>
 void gdt_init(void);
 int drivers_register_all(void);
 int install_to_hdd(void);
@@ -48,17 +48,19 @@ void kernel_main(uint32_t mb_info) {
     serial_init();
     gdt_init();
 
-    puts("[INFO] KERNEL: Kresten Kernel v2.0 x86 starting...\n");
+    puts("[INFO] KERNEL: Kresten Kernel v3.1 x86 starting...\n");
 
     idt_init();
+    guard_init();
     drivers_register_all();
     driver_init_all();
+    guard_kick();
 
     net_init();
     net_dhcp();
+    guard_watch();
 
     heap_init(0, 0);
-    rtc_init();
     env_init();
     reg_persist_setup(mb_info);
     reg_init();
@@ -71,11 +73,15 @@ void kernel_main(uint32_t mb_info) {
     proc_init();
     proc_create("test", test_process);
     net_thread_start();
+    guard_kick();
     {
         int rc = net_ping("10.0.2.2", 3);
         printf("[NET] gateway ping: %s\n", rc > 0 ? "OK" : "FAIL");
     }
+    guard_watch();
+    drv_load_all();        /* 外围驱动 .kdrv: ISO /drivers/ (ata/iso 已就绪) */
     plugin_init_all();
+    guard_kick();
     while (1)
         plugin_dispatch("desktop", NULL);
 }

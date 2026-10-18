@@ -26,7 +26,7 @@ void set_output_capture(char *buf, int size) {
 }
 
 void end_output_capture(void) {
-    if (capture_active && capture_buf)
+    if (capture_active && capture_buf && capture_max >= 0)
         capture_buf[capture_pos > capture_max ? capture_max : capture_pos] = '\0';
     capture_active = 0;
     capture_buf = 0;

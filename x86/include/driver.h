@@ -10,6 +10,7 @@ typedef enum {
     DRV_TYPE_KEYBOARD,
     DRV_TYPE_NET,
     DRV_TYPE_SCHEDULER,
+    DRV_TYPE_RTC,
     DRV_TYPE_COUNT
 } DriverType;
 
@@ -24,6 +25,16 @@ int driver_register(Driver *d);
 Driver *driver_find(const char *name);
 void driver_list_all(void);
 int driver_init_all(void);
+int driver_count(void);
+Driver *driver_at(int i);
+void driver_init_from(int from);
+
+/* 可加载驱动(.kdrv = ELF64 ET_DYN): 每个驱动模块导出唯一的 kdrv_driver
+ * 结构, 启动时由 drv_load_all() 从 ISO /drivers/ 加载并 driver_register。
+ * 静态驱动(启动子系统必需, 如 vga/sched/keyboard/ata/iso9660)不导出此符号。 */
+#define REGISTER_DRIVER(drv_name, drv_type, drv_init) \
+    Driver kdrv_driver __attribute__((visibility("default"))) = \
+        { drv_name, drv_type, drv_init, 0 }
 
 /* LCD driver API (PL110 @ 0x10120000) */
 int lcd_init(void);

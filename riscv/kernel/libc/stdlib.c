@@ -136,6 +136,16 @@ static void insert_free(block_t *b) {
     free_list = b;
 }
 
+/* 把外部内存区 (如守护系统自毁释放的 64KB) 作为空闲块并入堆 */
+void heap_extend(void *addr, size_t size) {
+    heap_ensure();
+    if (!addr || size <= sizeof(block_t) + 8) return;
+    block_t *b = (block_t *)addr;
+    b->magic = MAGIC_FREE;
+    b->size = size - sizeof(block_t);
+    insert_free(b);
+}
+
 static block_t *merge_adjacent(block_t *a) {
     block_t *b = (block_t *)((char *)a + sizeof(block_t) + a->size);
     if ((char *)b < (char *)heap_pool + HEAP_SIZE &&
